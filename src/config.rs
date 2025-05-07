@@ -324,6 +324,7 @@ mod tests {
         assert_eq!(cfg.timeout, 5000);
         let mut pb = PathBuf::new();
         pb.push("test_data");
+        println!("cfg.plot_dirs = {:?}", cfg.plot_dirs);
         assert_eq!(cfg.plot_dirs, vec![pb]);
     }
 }
