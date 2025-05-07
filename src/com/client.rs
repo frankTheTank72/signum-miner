@@ -75,7 +75,7 @@ pub enum ProxyDetails {
 
 impl Client {
     fn ua() -> String {
-        "signum-miner/".to_owned() + crate_version!()
+        format!("signum-miner/{}", env!("CARGO_PKG_VERSION"))
     }
 
     fn submit_nonce_headers(
