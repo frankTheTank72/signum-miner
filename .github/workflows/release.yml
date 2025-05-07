@@ -77,6 +77,9 @@ jobs:
         run: |
           mkdir release_files
           find artifacts -type f -exec cp {} release_files/ \;
+        
+      - name: Add config.yaml to release_files
+        run: cp config.yaml release_files/config.yaml
 
       - name: Create draft GitHub release
         uses: softprops/action-gh-release@v1
@@ -87,13 +90,6 @@ jobs:
             release_files/signum-miner
             release_files/signum-miner-aarch64
             release_files/signum-miner.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Copy config.yaml
-        run: |
-          mkdir -p artifacts
-          cp config.yaml artifacts/
-
+            release_files/config.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
