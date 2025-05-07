@@ -17,8 +17,11 @@ fn main() {
     #[cfg(not(target_env = "msvc"))]
     shared_config.flag("-std=c99");
 
-    #[cfg(not(target_env = "msvc"))]
-    shared_config.flag("-mtune=native");
+    // Nur wenn HOST == TARGET (kein Cross-Compile), dann -mtune=native setzen
+    if std::env::var("HOST").ok() == std::env::var("TARGET").ok() {
+        #[cfg(not(target_env = "msvc"))]
+        shared_config.flag("-mtune=native");
+    }
 
     let mut config = shared_config.clone();
 
@@ -98,6 +101,7 @@ fn main() {
             }
         }
     }
+
     #[cfg(any(feature = "simd", feature = "neon"))]
     build(shared_config);
 }
