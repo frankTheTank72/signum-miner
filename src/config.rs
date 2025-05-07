@@ -320,11 +320,23 @@ mod tests {
 
     #[test]
     fn test_load_cfg() {
-        let cfg = load_cfg("config.yaml");
-        assert_eq!(cfg.timeout, 5000);
-        let mut pb = PathBuf::new();
-        pb.push("test_data");
+        use std::path::PathBuf;
+
+        // Pfad zu test_data/config.yaml relativ zum Projekt-Root
+        let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("test_data")
+            .join("config.yaml");
+
+        // Konfiguration laden
+        let cfg = load_cfg(config_path.to_str().unwrap());
+
+        // Ausgabe für Debugging
         println!("cfg.plot_dirs = {:?}", cfg.plot_dirs);
-        assert_eq!(cfg.plot_dirs, vec![pb]);
+        println!("cfg.timeout = {:?}", cfg.timeout);
+
+        // Erwartete Werte prüfen
+        assert_eq!(cfg.timeout, 5000);
+
+        let expected_path = PathBuf::from("test_data");
+        assert_eq!(cfg.plot_dirs, vec![expected_path]);
     }
-}
