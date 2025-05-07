@@ -78,7 +78,10 @@ jobs:
         with:
           draft: true
           tag_name: ${{ github.event.inputs.release_tag }}
-          files: ./artifacts/**/*
+          files: |
+            ./artifacts/**/*
+            ./artifacts/**/signum-miner*
+            ./artifacts/**/signum-miner*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
