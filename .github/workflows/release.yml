@@ -2,24 +2,16 @@ name: Draft Release Build
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*.*.*'  # z. B. v1.9.0
 
 jobs:
   build:
-    name: Build and Draft Release
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - x86_64-pc-windows-gnu
-          - aarch64-unknown-linux-gnu
+        target: [x86_64-unknown-linux-gnu, x86_64-pc-windows-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin]
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Install Rust toolchain
@@ -28,36 +20,66 @@ jobs:
           toolchain: stable
           target: ${{ matrix.target }}
           override: true
-      
-      - name: Install ARM cross-compiler
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build with cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Rename binaries
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-gnu)
+              cp target/${{ matrix.target }}/release/signum-miner signum-miner
+              ;;
+            aarch64-unknown-linux-gnu)
+              cp target/${{ matrix.target }}/release/signum-miner signum-miner-aarch64
+              ;;
+            x86_64-apple-darwin)
+              zip signum-miner-x86_64-apple-darwin.zip target/${{ matrix.target }}/release/signum-miner
+              ;;
+            x86_64-pc-windows-gnu)
+              cp target/${{ matrix.target }}/release/signum-miner.exe signum-miner.exe
+              ;;
+          esac
 
-      - name: Install Windows cross-compiler
-        if: matrix.target == 'x86_64-pc-windows-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-mingw-w64
+      - name: Upload binaries as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: signum-miner-${{ matrix.target }}
+          path: |
+            signum-miner
+            signum-miner-aarch64
+            signum-miner-x86_64-apple-darwin.zip
+            signum-miner.exe
+        if: success()
 
-      - name: Build binary
-        run: cargo build --release --target ${{ matrix.target }}
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: ./artifacts
 
-      - name: Prepare artifacts
-        run: |
-          mkdir -p artifacts
-          if [[ "${{ matrix.target }}" == *windows* ]]; then
-            cp target/${{ matrix.target }}/release/signum-miner.exe artifacts/Signum-miner-${{ matrix.target }}.exe
-          else
-            cp target/${{ matrix.target }}/release/signum-miner artifacts/Signum-miner-${{ matrix.target }}
-          fi
-          cp config.yaml artifacts/
+      - name: Copy config.yaml
+        run: cp config.yaml config.yaml
 
-      - name: Create draft release
+      - name: Create draft GitHub release
         uses: softprops/action-gh-release@v1
         with:
           draft: true
-          files: artifacts/*
+          tag_name: v${{ github.run_number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ./artifacts/**/*
+            config.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
