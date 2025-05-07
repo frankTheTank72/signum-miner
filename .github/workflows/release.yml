@@ -76,7 +76,9 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir release_files
-          find artifacts -type f -exec cp {} release_files/ \;
+          cp artifacts/signum-miner-x86_64-unknown-linux-gnu/signum-miner release_files/signum-miner
+          cp artifacts/signum-miner-aarch64-unknown-linux-gnu/signum-miner release_files/signum-miner-aarch64
+          cp artifacts/signum-miner-x86_64-pc-windows-gnu/signum-miner.exe release_files/signum-miner.exe
         
       - name: Add config.yaml to release_files
         run: cp config.yaml release_files/config.yaml
