@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use url::form_urlencoded::byte_serialize;
 use url::Url;
+use hostname::get;
 
 /// A client for communicating with Pool/Proxy/Wallet.
 #[derive(Clone, Debug)]
@@ -89,20 +90,14 @@ impl Client {
             // It's amazing how a user agent is just not enough.
             headers.insert("X-Capacity", total_size_gb.to_string().parse().unwrap());
             headers.insert("X-Miner", ua.to_owned().parse().unwrap());
-            headers.insert(
-                "X-Minername",
-                hostname::get_hostname()
-                    .unwrap_or_else(|| "".to_owned())
-                    .parse()
-                    .unwrap(),
-            );
-            headers.insert(
-                "X-Plotfile",
-                ("signum-miner-proxy/".to_owned()
-                    + &*hostname::get_hostname().unwrap_or_else(|| "".to_owned()))
-                    .parse()
-                    .unwrap(),
-            );
+
+            let hostname = get()
+                .ok()
+                .and_then(|h| h.into_string().ok())
+                .unwrap_or_else(|| "".to_owned());
+
+            headers.insert("X-Minername", hostname.parse().unwrap());
+            headers.insert("X-Plotfile", format!("signum-miner-proxy/{}", hostname).parse().unwrap());
         }
 
         for (key, value) in additional_headers {
