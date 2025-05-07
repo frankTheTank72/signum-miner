@@ -326,7 +326,7 @@ mod tests {
         let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("test_data")
             .join("test_config.yaml");
-
+        println!("Path to config ", config_path);
         // Konfiguration laden
         let cfg = load_cfg(config_path.to_str().unwrap());
 
