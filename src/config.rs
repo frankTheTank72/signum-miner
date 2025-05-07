@@ -326,6 +326,9 @@ mod tests {
         let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("test_data")
             .join("test_config.yaml");
+        println!("Loading config from: {}", config_path.display());
+        let contents = std::fs::read_to_string(&config_path).unwrap();
+        println!("YAML content:\n{}", contents);
         println!("Path to config: {:?}", config_path);
         // Konfiguration laden
         let cfg = load_cfg(config_path.to_str().unwrap());
