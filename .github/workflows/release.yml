@@ -73,15 +73,18 @@ jobs:
           git tag ${{ github.event.inputs.release_tag }}
           git push origin ${{ github.event.inputs.release_tag }}
 
+      - name: Flatten artifacts
+        run: |
+          mkdir release_files
+          find artifacts -type f -exec cp {} release_files/ \;
+
       - name: Create draft GitHub release
         uses: softprops/action-gh-release@v1
         with:
           draft: true
           tag_name: ${{ github.event.inputs.release_tag }}
           files: |
-            ./artifacts/**/*
-            ./artifacts/**/signum-miner*
-            ./artifacts/**/signum-miner*.exe
+            release_files/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
