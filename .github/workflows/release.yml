@@ -45,6 +45,7 @@ jobs:
               ;;
           esac
 
+
       - name: Upload binaries as artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -82,11 +83,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Copy config.yaml
+        run: cp ./config.yaml ./artifacts/
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v1
         with:
           files: |
             ./artifacts/**/*
-            config.yaml
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
