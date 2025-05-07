@@ -1,13 +1,13 @@
-name: Release Build
+name: Draft Release Build
 
 on:
   push:
     tags:
-      - 'v*.*.*'  # Trigger bei Git-Tags wie v1.9.0
+      - 'v*.*.*'  # z. B. v1.9.0
 
 jobs:
   build:
-    name: Build Binaries
+    name: Build and Draft Release
     runs-on: ubuntu-latest
 
     strategy:
@@ -18,22 +18,22 @@ jobs:
           - aarch64-unknown-linux-gnu
 
     steps:
-      - name: Checkout source
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Rust
+      - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: ${{ matrix.target }}
           override: true
 
-      - name: Build
+      - name: Build binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Rename binaries
+      - name: Prepare artifacts
         run: |
-          mkdir artifacts
+          mkdir -p artifacts
           if [[ "${{ matrix.target }}" == *windows* ]]; then
             cp target/${{ matrix.target }}/release/signum-miner.exe artifacts/Signum-miner-${{ matrix.target }}.exe
           else
@@ -41,9 +41,10 @@ jobs:
           fi
           cp config.yaml artifacts/
 
-      - name: Upload release
+      - name: Create draft release
         uses: softprops/action-gh-release@v1
         with:
+          draft: true
           files: artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
