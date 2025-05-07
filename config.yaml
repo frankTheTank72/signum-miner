@@ -1,16 +1,10 @@
-# PLEASE ONLY ENTER YOUR PASSPHRASE BELOW IF YOU ARE GOING TO MINE SOLO!
-# YOU DO NOT NEED TO ENTER YOUR PASSPHRASE FOR POOL MINING.
-# NEVER POST YOUR CONFIG.YAML INCLUDING YOUR PASSPHRASE TO ANY BOARD OR CHAT!
-account_id_to_secret_phrase:          # define accounts and passphrases for solo mining 
-  10282355196851764065: 'glad suffer red during single glow shut slam hill death lust although'          # Bold's example wallet
-  1796535821016683299: 'stand rude those door invite reflection anywhere lace safe hidden fur horrible'  # Johnny's example wallet
-
 # List of directories with your plot files, adjust to suit your disks
 plot_dirs:
-  - 'D:\plot\dir'             # Sample Windows directory
-  - 'E:\plot\dir'             # Sample Windows directory
-  - '/mnt/hd1/plot/dir'       # Sample Linux directory
-  - '/mnt/hd1/plot/dir'       # Sample Linux directory
+  - '/test_data'               # Sample Linux for test run
+  #- 'D:\plot\dir'             # Sample Windows directory
+  #- 'E:\plot\dir'             # Sample Windows directory
+  #- '/mnt/hd1/plot/dir'       # Sample Linux directory
+  #- '/mnt/hd1/plot/dir'       # Sample Linux directory
 
 url: 'https://pool.burstcoin.ro'      # mainnet pool
 #url: 'http://nivbox.co.uk:9000'      # testnet pool
