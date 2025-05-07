@@ -36,9 +36,6 @@ jobs:
             aarch64-unknown-linux-gnu)
               cp target/${{ matrix.target }}/release/signum-miner signum-miner-aarch64
               ;;
-            x86_64-apple-darwin)
-              zip signum-miner-x86_64-apple-darwin.zip target/${{ matrix.target }}/release/signum-miner
-              ;;
             x86_64-pc-windows-gnu)
               cp target/${{ matrix.target }}/release/signum-miner.exe signum-miner.exe
               ;;
@@ -51,7 +48,6 @@ jobs:
           path: |
             signum-miner
             signum-miner-aarch64
-            signum-miner-x86_64-apple-darwin.zip
             signum-miner.exe
         if: success()
 
