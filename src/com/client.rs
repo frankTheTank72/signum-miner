@@ -224,7 +224,7 @@ mod tests {
     use super::*;
     use tokio;
 
-    static BASE_URL: &str = "https://wallet.burstcoin.ro/";
+    static BASE_URL: &str = "https://europe.signum.network/";
 
     #[test]
     fn test_submit_params_cmp() {
