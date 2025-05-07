@@ -20,7 +20,7 @@ opencl = ["ocl-core"]
 
 [dependencies]
 cfg-if = "0.1"
-clap = "~4.50"
+clap = "4.5"
 core_affinity = "0.5.9"
 crossbeam-channel = "0.3"
 filetime = "0.2"
