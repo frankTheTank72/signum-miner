@@ -325,7 +325,7 @@ mod tests {
         // Pfad zu test_data/config.yaml relativ zum Projekt-Root
         let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("test_data")
-            .join("config.yaml");
+            .join("test_config.yaml");
 
         // Konfiguration laden
         let cfg = load_cfg(config_path.to_str().unwrap());
@@ -340,3 +340,4 @@ mod tests {
         let expected_path = PathBuf::from("test_data");
         assert_eq!(cfg.plot_dirs, vec![expected_path]);
     }
+}
