@@ -4,7 +4,7 @@ version = "1.8.1"
 license = "GPL-3.0"
 authors = ["signum-network, forked from PoC Consortium"]
 description = """
-signum-miner - a PoC miner written in Rust
+A fast and flexible miner for the Signum blockchain.
 """
 build = "build.rs"
 repository = "https://github.com/signum-network/signum-miner"
