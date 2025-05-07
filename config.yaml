@@ -1,6 +1,6 @@
 # List of directories with your plot files, adjust to suit your disks
 plot_dirs:
-  - '/test-data'               # Sample Linux for test run
+  - '/test_data'               # Sample Linux for test run
   #- 'D:\plot\dir'             # Sample Windows directory
   #- 'E:\plot\dir'             # Sample Windows directory
   #- '/mnt/hd1/plot/dir'       # Sample Linux directory
