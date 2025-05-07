@@ -1,5 +1,4 @@
 timeout: 5000
 plot_dirs:
-  - test_data
-  
-url: 'https://pool.burstcoin.ro'      # mainnet pool
+  - 'test_data'
+url: "http://localhost"
