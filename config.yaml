@@ -6,6 +6,7 @@ plot_dirs:
   - '/mnt/hd1/plot/dir'       # Sample Linux directory
 
 url: 'https://pool.burstcoin.ro'      # mainnet pool
+#url: 'https://t-pool.notallmine.net' # testnet pool
 #url: 'http://localhost:8125'         # solo mining
 #url: 'http://localhost:6876'         # solo mining testnet
 
