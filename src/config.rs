@@ -17,6 +17,7 @@ pub struct Cfg {
     #[serde(default = "default_secret_phrase")]
     pub account_id_to_secret_phrase: HashMap<u64, String>,
 
+    #[serde(default)]
     pub plot_dirs: Vec<PathBuf>,
 
     #[serde(with = "url_serde")]
@@ -248,6 +249,17 @@ fn default_submit_only_best() -> bool {
 
 pub fn load_cfg(config: &str) -> Cfg {
     let cfg_str = fs::read_to_string(config).expect("failed to open config");
+    pub fn load_cfg(config: &str) -> Cfg {
+    let cfg_str = fs::read_to_string(config).expect("failed to open config");
+    let cfg: Cfg = serde_yaml::from_str(&cfg_str).expect("failed to parse config");
+    if cfg.hdd_use_direct_io {
+        assert!(
+            cfg.cpu_nonces_per_cache % 64 == 0 && cfg.gpu_nonces_per_cache % 64 == 0,
+            "nonces_per_cache should be devisable by 64 when using direct io"
+        );
+    }
+    validate_cfg(cfg)
+}
     let cfg: Cfg = serde_yaml::from_str(&cfg_str).expect("failed to parse config");
     if cfg.hdd_use_direct_io {
         assert!(
@@ -320,10 +332,27 @@ mod tests {
 
     #[test]
     fn test_load_cfg() {
-        let cfg = load_cfg("config.yaml");
+        use std::path::PathBuf;
+
+        // Pfad zu test_data/config.yaml relativ zum Projekt-Root
+        let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("test_data")
+            .join("test_config.yaml");
+        println!("Loading config from: {}", config_path.display());
+        let contents = std::fs::read_to_string(&config_path).unwrap();
+        println!("YAML content:\n{}", contents);
+        println!("Path to config: {:?}", config_path);
+        // Konfiguration laden
+        let cfg = load_cfg(config_path.to_str().unwrap());
+
+        // Ausgabe für Debugging
+        println!("cfg.plot_dirs = {:?}", cfg.plot_dirs);
+        println!("cfg.timeout = {:?}", cfg.timeout);
+
+        // Erwartete Werte prüfen
         assert_eq!(cfg.timeout, 5000);
-        let mut pb = PathBuf::new();
-        pb.push("test_data");
-        assert_eq!(cfg.plot_dirs, vec![pb]);
+
+        let expected_path = PathBuf::from("test_data");
+        assert_eq!(cfg.plot_dirs, vec![expected_path]);
     }
 }

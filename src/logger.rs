@@ -123,13 +123,14 @@ mod tests {
 
     #[test]
     fn test_init_logger() {
+        use std::path::PathBuf;
         use crate::config::load_cfg;
         let mut cfg = load_cfg("config.yaml");
-
-        // we dont want to see this during tests
+ 
         cfg.console_log_level = log::LevelFilter::Error.to_string();
-
+    
         let _ = init_logger(&cfg);
+    
         trace!("TRACE");
         debug!("DEBUG");
         info!("INFO");

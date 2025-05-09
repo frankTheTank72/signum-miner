@@ -1,10 +1,3 @@
-# PLEASE ONLY ENTER YOUR PASSPHRASE BELOW IF YOU ARE GOING TO MINE SOLO!
-# YOU DO NOT NEED TO ENTER YOUR PASSPHRASE FOR POOL MINING.
-# NEVER POST YOUR CONFIG.YAML INCLUDING YOUR PASSPHRASE TO ANY BOARD OR CHAT!
-account_id_to_secret_phrase:          # define accounts and passphrases for solo mining 
-  10282355196851764065: 'glad suffer red during single glow shut slam hill death lust although'          # Bold's example wallet
-  1796535821016683299: 'stand rude those door invite reflection anywhere lace safe hidden fur horrible'  # Johnny's example wallet
-
 # List of directories with your plot files, adjust to suit your disks
 plot_dirs:
   - 'D:\plot\dir'             # Sample Windows directory
@@ -13,9 +6,8 @@ plot_dirs:
   - '/mnt/hd1/plot/dir'       # Sample Linux directory
 
 url: 'https://pool.burstcoin.ro'      # mainnet pool
-#url: 'http://nivbox.co.uk:9000'      # testnet pool
+#url: 'https://t-pool.notallmine.net' # testnet pool
 #url: 'http://localhost:8125'         # solo mining
-#url: 'http://localhost:8125'         # solo mining testnet
 #url: 'http://localhost:6876'         # solo mining testnet
 
 hdd_reader_thread_count: 0            # default 0 (=auto: number of disks)

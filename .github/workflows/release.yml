@@ -1,0 +1,97 @@
+name: Draft Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g. v1.8.0)'
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, x86_64-pc-windows-gnu, aarch64-unknown-linux-gnu]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build with cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Rename binaries
+        run: |
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-gnu)
+              cp target/${{ matrix.target }}/release/signum-miner signum-miner
+              ;;
+            aarch64-unknown-linux-gnu)
+              cp target/${{ matrix.target }}/release/signum-miner signum-miner-aarch64
+              ;;
+            x86_64-pc-windows-gnu)
+              cp target/${{ matrix.target }}/release/signum-miner.exe signum-miner.exe
+              ;;
+          esac
+
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signum-miner-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/signum-miner*
+        if: success()
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create git tag
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git tag ${{ github.event.inputs.release_tag }}
+          git push origin ${{ github.event.inputs.release_tag }}
+
+      - name: Flatten artifacts
+        run: |
+          mkdir release_files
+          cp artifacts/signum-miner-x86_64-unknown-linux-gnu/signum-miner release_files/signum-miner
+          cp artifacts/signum-miner-aarch64-unknown-linux-gnu/signum-miner release_files/signum-miner-aarch64
+          cp artifacts/signum-miner-x86_64-pc-windows-gnu/signum-miner.exe release_files/signum-miner.exe
+        
+      - name: Add config.yaml to release_files
+        run: cp config.yaml release_files/config.yaml
+
+      - name: Create draft GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          tag_name: ${{ github.event.inputs.release_tag }}
+          files: |
+            release_files/signum-miner
+            release_files/signum-miner-aarch64
+            release_files/signum-miner.exe
+            release_files/config.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
