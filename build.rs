@@ -1,6 +1,7 @@
 // Import the `cc` crate for compiling C files
 extern crate cc;
 use std::env;
+use std::process::Command;
 
 #[cfg(target_env = "gnu")]
 fn compile_windows_icon() {
@@ -13,7 +14,17 @@ fn compile_windows_icon() {
         let res_path = format!("{}/icon.res", out_dir);
 
         // Compile .rc file into .res
-        let status = std::process::Command::new("windres")
+        let windres_cmd = if Command::new("x86_64-w64-mingw32-windres").arg("--version").status().is_ok() {
+            "x86_64-w64-mingw32-windres"  
+        } else if Command::new("i686-w64-mingw32-windres").arg("--version").status().is_ok() {
+            "i686-w64-mingw32-windres"   
+        } else if Command::new("windres").arg("--version").status().is_ok() {
+            "windres"  
+        } else {
+            println!("cargo:warning=Windres not found, skipping icon resource compilation.");
+            return;
+        };
+        let status = std::process::Command::new(windres_cmd)
             .args(&["--input", rc_path, "--output", &res_path, "--output-format=coff"])
             .status()
             .expect("failed to run windres");
@@ -29,7 +40,7 @@ fn compile_windows_icon() {
 
 fn main() {
     let mut shared_config = cc::Build::new();
-    
+
     #[cfg(target_env = "gnu")]
     compile_windows_icon();
 
