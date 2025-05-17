@@ -1,9 +1,7 @@
-use serde::de::{Deserialize, Deserializer};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::u32;
-use url::Url;
 
 #[derive(Debug, Serialize)]
 pub enum Benchmark {
@@ -20,8 +18,7 @@ pub struct Cfg {
     #[serde(default)]
     pub plot_dirs: Vec<PathBuf>,
 
-    #[serde(with = "url_serde")]
-    pub url: Url,
+    pub url: ::url::Url,
 
     #[serde(default = "default_hdd_reader_thread_count")]
     pub hdd_reader_thread_count: usize,
@@ -116,7 +113,7 @@ pub struct Cfg {
 impl<'de> Deserialize<'de> for Benchmark {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: Deserializer<'de>,
+        D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
         Ok(match s.as_str().to_lowercase().as_ref() {
@@ -249,22 +246,11 @@ fn default_submit_only_best() -> bool {
 
 pub fn load_cfg(config: &str) -> Cfg {
     let cfg_str = fs::read_to_string(config).expect("failed to open config");
-    pub fn load_cfg(config: &str) -> Cfg {
-    let cfg_str = fs::read_to_string(config).expect("failed to open config");
     let cfg: Cfg = serde_yaml::from_str(&cfg_str).expect("failed to parse config");
     if cfg.hdd_use_direct_io {
         assert!(
             cfg.cpu_nonces_per_cache % 64 == 0 && cfg.gpu_nonces_per_cache % 64 == 0,
-            "nonces_per_cache should be devisable by 64 when using direct io"
-        );
-    }
-    validate_cfg(cfg)
-}
-    let cfg: Cfg = serde_yaml::from_str(&cfg_str).expect("failed to parse config");
-    if cfg.hdd_use_direct_io {
-        assert!(
-            cfg.cpu_nonces_per_cache % 64 == 0 && cfg.gpu_nonces_per_cache % 64 == 0,
-            "nonces_per_cache should be devisable by 64 when using direct io"
+            "nonces_per_cache should be divisible by 64 when using direct io"
         );
     }
     validate_cfg(cfg)
@@ -304,27 +290,14 @@ pub fn validate_cfg(mut cfg: Cfg) -> Cfg {
 
 impl Cfg {
     pub fn benchmark_cpu(&self) -> bool {
-        if let Some(benchmark) = &self.benchmark_only {
-            match benchmark {
-                Benchmark::XPU => true,
-                _ => false,
-            }
-        } else {
-            false
-        }
+        matches!(self.benchmark_only, Some(Benchmark::XPU))
     }
 
     pub fn benchmark_io(&self) -> bool {
-        if let Some(benchmark) = &self.benchmark_only {
-            match benchmark {
-                Benchmark::IO => true,
-                _ => false,
-            }
-        } else {
-            false
-        }
+        matches!(self.benchmark_only, Some(Benchmark::IO))
     }
 }
+
 
 #[cfg(test)]
 mod tests {

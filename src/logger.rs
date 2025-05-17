@@ -123,7 +123,6 @@ mod tests {
 
     #[test]
     fn test_init_logger() {
-        use std::path::PathBuf;
         use crate::config::load_cfg;
         let mut cfg = load_cfg("config.yaml");
  

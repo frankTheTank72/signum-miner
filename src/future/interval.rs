@@ -10,74 +10,52 @@
 //! 3. We timeout after time = 10s
 //! 4. We fire our next request at time t = 13s
 
-use futures::{try_ready, Future, Poll, Stream};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
-use tokio::clock;
-use tokio::timer::Delay;
-use tokio::timer::Error;
+use core::future::Future; 
+use futures_core::stream::Stream;
+use tokio::time::{sleep_until, Sleep};
 
-/// A stream representing notifications at fixed interval
+/// A stream representing notifications at a fixed interval *after* processing completes.
+/// Unlike Tokio's default interval, this implementation starts the countdown after each item completes.
 #[derive(Debug)]
 pub struct Interval {
-    /// Future that completes the next time the `Interval` yields a value.
-    delay: Delay,
-
-    /// The duration between values yielded by `Interval`.
+    sleep: Pin<Box<Sleep>>,
     duration: Duration,
 }
 
 impl Interval {
-    /// Create a new `Interval` that starts at `at` and yields every `duration`
-    /// interval after that.
-    ///
-    /// Note that when it starts, it produces item too.
-    ///
-    /// The `duration` argument must be a non-zero duration.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if `duration` is zero.
-    pub fn new(at: Instant, duration: Duration) -> Interval {
+    /// Create a new `Interval` that starts at `at` and yields every `duration` interval after processing.
+    pub fn new(at: Instant, duration: Duration) -> Self {
         assert!(
-            duration > Duration::new(0, 0),
+            duration > Duration::ZERO,
             "`duration` must be non-zero."
         );
 
-        Interval::new_with_delay(Delay::new(at), duration)
+        let sleep = Box::pin(sleep_until(at.into()));
+        Self { sleep, duration }
     }
 
-    /// Creates new `Interval` that yields with interval of `duration`.
-    ///
-    /// The function is shortcut for `Interval::new(Instant::now() + duration, duration)`.
-    ///
-    /// The `duration` argument must be a non-zero duration.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if `duration` is zero.
-    pub fn new_interval(duration: Duration) -> Interval {
-        Interval::new(clock::now(), duration)
-    }
-
-    pub(crate) fn new_with_delay(delay: Delay, duration: Duration) -> Interval {
-        Interval { delay, duration }
+    /// Shortcut for starting an interval from now + duration.
+    pub fn new_interval(duration: Duration) -> Self {
+        Self::new(Instant::now() + duration, duration)
     }
 }
 
 impl Stream for Interval {
     type Item = Instant;
-    type Error = Error;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        // Wait for the delay to be done
-        let _ = try_ready!(self.delay.poll());
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if self.sleep.as_mut().poll(cx).is_pending() {
+            return Poll::Pending;
+        }
 
-        self.delay.reset(Instant::now() + self.duration);
+        let now = Instant::now();
+        let duration = self.duration;
+        self.sleep.as_mut().reset((now + duration).into());
 
-        // Get the `now` by looking at the `delay` deadline
-        let now = self.delay.deadline();
-
-        // Return the current instant
-        Ok(Some(now).into())
+        Poll::Ready(Some(now))
     }
+
 }

@@ -1,14 +1,11 @@
 use crate::com::api::{FetchError, MiningInfoResponse};
 use crate::com::client::{Client, ProxyDetails, SubmissionParameters};
 use crate::future::prio_retry::PrioRetry;
-use futures::future::Future;
-use futures::stream::Stream;
-use futures::sync::mpsc;
+use futures_util::stream::{StreamExt};
 use std::collections::HashMap;
 use std::time::Duration;
-use std::u64;
-use tokio;
-use tokio::runtime::TaskExecutor;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use url::Url;
 
 #[derive(Clone)]
@@ -25,9 +22,8 @@ impl RequestHandler {
         total_size_gb: usize,
         send_proxy_details: bool,
         additional_headers: HashMap<String, String>,
-        executor: TaskExecutor,
+        handle: tokio::runtime::Handle,
     ) -> RequestHandler {
-        // TODO
         let proxy_details = if send_proxy_details {
             ProxyDetails::Enabled
         } else {
@@ -43,12 +39,12 @@ impl RequestHandler {
             additional_headers,
         );
 
-        let (tx_submit_data, rx_submit_nonce_data) = mpsc::unbounded();
+        let (tx_submit_data, rx_submit_nonce_data) = mpsc::unbounded_channel();
         RequestHandler::handle_submissions(
             client.clone(),
             rx_submit_nonce_data,
             tx_submit_data.clone(),
-            executor,
+            handle,
         );
 
         RequestHandler {
@@ -61,79 +57,74 @@ impl RequestHandler {
         client: Client,
         rx: mpsc::UnboundedReceiver<SubmissionParameters>,
         tx_submit_data: mpsc::UnboundedSender<SubmissionParameters>,
-        executor: TaskExecutor,
+        handle: tokio::runtime::Handle,
     ) {
-        let stream = PrioRetry::new(rx, Duration::from_secs(3))
-            .and_then(move |submission_params| {
+        handle.spawn(async move {
+            let wrapped_rx = UnboundedReceiverStream::new(rx);
+            let stream = PrioRetry::new(wrapped_rx, Duration::from_secs(3));
+
+            let mut stream = Box::pin(stream);
+            while let Some(submission_params) = stream.as_mut().next().await {
                 let tx_submit_data = tx_submit_data.clone();
-                client
-                    .clone()
-                    .submit_nonce(&submission_params)
-                    .then(move |res| {
-                        match res {
-                            Ok(res) => {
-                                if submission_params.deadline != res.deadline {
-                                    log_deadline_mismatch(
-                                        submission_params.height,
-                                        submission_params.account_id,
-                                        submission_params.nonce,
-                                        submission_params.deadline,
-                                        res.deadline,
-                                    );
-                                } else {
-                                    log_submission_accepted(
-                                        submission_params.account_id,
-                                        submission_params.nonce,
-                                        submission_params.deadline,
-                                    );
-                                }
+                let result = client.clone().submit_nonce(&submission_params).await;
+
+                match result {
+                    Ok(res) => {
+                        if submission_params.deadline != res.deadline {
+                            log_deadline_mismatch(
+                                submission_params.height,
+                                submission_params.account_id,
+                                submission_params.nonce,
+                                submission_params.deadline,
+                                res.deadline,
+                            );
+                        } else {
+                            log_submission_accepted(
+                                submission_params.account_id,
+                                submission_params.nonce,
+                                submission_params.deadline,
+                            );
+                        }
+                    }
+                    Err(FetchError::Pool(e)) => {
+                        if e.message.is_empty() || e.message == "limit exceeded" {
+                            log_pool_busy(
+                                submission_params.account_id,
+                                submission_params.nonce,
+                                submission_params.deadline,
+                            );
+                            if tx_submit_data.send(submission_params).is_err() {
+                                error!("can't send submission params");
                             }
-                            Err(FetchError::Pool(e)) => {
-                                // Very intuitive, if some pools send an empty message they are
-                                // experiencing too much load expect the submission to be resent later.
-                                if e.message.is_empty() || e.message == "limit exceeded" {
-                                    log_pool_busy(
-                                        submission_params.account_id,
-                                        submission_params.nonce,
-                                        submission_params.deadline,
-                                    );
-                                    let res = tx_submit_data.unbounded_send(submission_params);
-                                    if let Err(e) = res {
-                                        error!("can't send submission params: {}", e);
-                                    }
-                                } else {
-                                    log_submission_not_accepted(
-                                        submission_params.height,
-                                        submission_params.account_id,
-                                        submission_params.nonce,
-                                        submission_params.deadline,
-                                        e.code,
-                                        &e.message,
-                                    );
-                                }
-                            }
-                            Err(FetchError::Http(x)) => {
-                                log_submission_failed(
-                                    submission_params.account_id,
-                                    submission_params.nonce,
-                                    submission_params.deadline,
-                                    &x.to_string(),
-                                );
-                                let res = tx_submit_data.unbounded_send(submission_params);
-                                if let Err(e) = res {
-                                    error!("can't send submission params: {}", e);
-                                }
-                            }
-                        };
-                        Ok(())
-                    })
-            })
-            .for_each(|_| Ok(()))
-            .map_err(|e| error!("can't handle submission params: {:?}", e));
-        executor.spawn(stream);
+                        } else {
+                            log_submission_not_accepted(
+                                submission_params.height,
+                                submission_params.account_id,
+                                submission_params.nonce,
+                                submission_params.deadline,
+                                e.code,
+                                &e.message,
+                            );
+                        }
+                    }
+                    Err(FetchError::Http(x)) => {
+                        log_submission_failed(
+                            submission_params.account_id,
+                            submission_params.nonce,
+                            submission_params.deadline,
+                            &x.to_string(),
+                        );
+                        if tx_submit_data.send(submission_params).is_err() {
+                            error!("can't send submission params");
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        });
     }
 
-    pub fn get_mining_info(&self) -> impl Future<Item = MiningInfoResponse, Error = FetchError> {
+    pub fn get_mining_info<'a>(&'a self) -> impl std::future::Future<Output = Result<MiningInfoResponse, FetchError>> + 'a {
         self.client.get_mining_info()
     }
 
@@ -147,7 +138,7 @@ impl RequestHandler {
         deadline: u64,
         gen_sig: [u8; 32],
     ) {
-        let res = self.tx_submit_data.unbounded_send(SubmissionParameters {
+        let res = self.tx_submit_data.send(SubmissionParameters {
             account_id,
             nonce,
             height,
@@ -218,26 +209,30 @@ fn log_pool_busy(account_id: u64, nonce: u64, deadline: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio;
+    use std::collections::HashMap;
+    use tokio::runtime::Runtime;
 
     static BASE_URL: &str = "http://94.130.178.37:31000";
 
     #[test]
     fn test_submit_nonce() {
-        let rt = tokio::runtime::Runtime::new().expect("can't create runtime");
+    use url::Url; // sicherstellen, dass url::Url verwendet wird
+    let rt = Runtime::new().expect("can't create runtime");
+    let handle = rt.handle().clone();
 
-        let request_handler = RequestHandler::new(
-            BASE_URL.parse().unwrap(),
-            HashMap::new(),
-            3,
-            12,
-            true,
-            HashMap::new(),
-            rt.executor(),
-        );
+    // erzwinge url::Url statt reqwest::Url
+    let base_url: Url = BASE_URL.parse().expect("invalid URL");
 
-        request_handler.submit_nonce(1337, 12, 111, 0, 7123, 1193, [0; 32]);
+    let request_handler = RequestHandler::new(
+        base_url,
+        HashMap::new(),
+        3,
+        12,
+        true,
+        HashMap::new(),
+        handle,
+    );
 
-        rt.shutdown_on_idle();
-    }
+    request_handler.submit_nonce(1337, 12, 111, 0, 7123, 1193, [0; 32]);
+}
 }

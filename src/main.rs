@@ -1,3 +1,4 @@
+//! Modernized main.rs with async/await support
 #![warn(unused_extern_crates)]
 
 #[macro_use]
@@ -30,43 +31,78 @@ mod ocl;
 use crate::config::load_cfg;
 use crate::miner::Miner;
 use clap::{Arg, Command};
-use futures::Future;
 use std::process;
-use tokio::runtime::Builder;
 
 cfg_if! {
-    if #[cfg(feature = "simd")] {
+    if #[cfg(feature = "simd_avx512f")] {
         extern "C" {
-            pub fn init_shabal_avx512f() -> ();
-            pub fn init_shabal_avx2() -> ();
-            pub fn init_shabal_avx() -> ();
-            pub fn init_shabal_sse2() -> ();
+            pub fn init_shabal_avx512f();
         }
 
         fn init_cpu_extensions() {
-            if is_x86_feature_detected!("avx512f") {
-                info!("SIMD extensions: AVX512F");
-                unsafe { init_shabal_avx512f(); }
-            } else if is_x86_feature_detected!("avx2") {
-                info!("SIMD extensions: AVX2");
-                unsafe { init_shabal_avx2(); }
-            } else if is_x86_feature_detected!("avx") {
-                info!("SIMD extensions: AVX");
-                unsafe { init_shabal_avx(); }
-            } else if is_x86_feature_detected!("sse2") {
-                info!("SIMD extensions: SSE2");
-                unsafe { init_shabal_sse2(); }
-            } else {
-                info!("SIMD extensions: none");
-            }
+            info!("SIMD extensions: AVX512F");
+            unsafe { init_shabal_avx512f(); }
+        }
+    } else if #[cfg(feature = "simd_avx2")] {
+        extern "C" {
+            pub fn init_shabal_avx2();
+        }
+
+        fn init_cpu_extensions() {
+            info!("SIMD extensions: AVX2");
+            unsafe { init_shabal_avx2(); }
+        }
+    } else if #[cfg(feature = "simd_avx")] {
+        extern "C" {
+            pub fn init_shabal_avx();
+        }
+
+        fn init_cpu_extensions() {
+            info!("SIMD extensions: AVX");
+            unsafe { init_shabal_avx(); }
+        }
+    } else if #[cfg(feature = "simd_sse2")] {
+        extern "C" {
+            pub fn init_shabal_sse2();
+        }
+
+        fn init_cpu_extensions() {
+            info!("SIMD extensions: SSE2");
+            unsafe { init_shabal_sse2(); }
+        }
+    } else {
+        fn init_cpu_extensions() {
+            info!("SIMD extensions: none");
         }
     }
 }
 
+fn print_simd_support() {
+    println!("SIMD support check:");
+
+    if std::is_x86_feature_detected!("avx512f") {
+        println!("✅ AVX-512F supported");
+    }
+    if std::is_x86_feature_detected!("avx2") {
+        println!("✅ AVX2 supported");
+    }
+    if std::is_x86_feature_detected!("avx") {
+        println!("✅ AVX supported");
+    }
+    if std::is_x86_feature_detected!("sse4.2") {
+        println!("✅ SSE4.2 supported");
+    }
+    if std::is_x86_feature_detected!("sse4.1") {
+        println!("✅ SSE4.1 supported");
+    }
+    if std::is_x86_feature_detected!("sse2") {
+        println!("✅ SSE2 supported");
+    }
+}
 cfg_if! {
     if #[cfg(feature = "neon")] {
         extern "C" {
-            pub fn init_shabal_neon() -> ();
+            pub fn init_shabal_neon();
         }
 
         fn init_cpu_extensions() {
@@ -85,8 +121,9 @@ cfg_if! {
     }
 }
 
-fn main() {
-    let mut cmd = Command::new(env!("CARGO_PKG_NAME"))
+#[tokio::main(flavor = "multi_thread")]
+async fn main() {
+    let cmd = Command::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
         .about(env!("CARGO_PKG_DESCRIPTION"))
@@ -101,15 +138,13 @@ fn main() {
         );
 
     #[cfg(feature = "opencl")]
-    {
-        cmd = cmd.arg(
-            Arg::new("opencl")
-                .short('o')
-                .long("opencl")
-                .help("Display OpenCL platforms and devices")
-                .action(clap::ArgAction::SetTrue),
-        );
-    }
+    let cmd = cmd.arg(
+        Arg::new("opencl")
+            .short('o')
+            .long("opencl")
+            .help("Display OpenCL platforms and devices")
+            .action(clap::ArgAction::SetTrue),
+    );
 
     let matches = cmd.get_matches();
     let config = matches
@@ -125,7 +160,7 @@ fn main() {
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION")
     );
-
+    print_simd_support();
     #[cfg(feature = "opencl")]
     info!("GPU extensions: OpenCL");
 
@@ -135,14 +170,19 @@ fn main() {
         process::exit(0);
     }
 
-    #[cfg(any(feature = "simd", feature = "neon"))]
+    #[cfg(any(
+        feature = "simd_avx512f",
+        feature = "simd_avx2",
+        feature = "simd_avx",
+        feature = "simd_sse2",
+        feature = "neon"
+    ))]
     init_cpu_extensions();
 
     #[cfg(feature = "opencl")]
     ocl::gpu_info(&cfg_loaded);
 
-    let rt = Builder::new().core_threads(1).build().unwrap();
-    let m = Miner::new(cfg_loaded, rt.executor());
-    m.run();
-    rt.shutdown_on_idle().wait().unwrap();
+    let handle = tokio::runtime::Handle::current();
+    let miner = Miner::new(cfg_loaded, handle);
+    miner.run().await;
 }

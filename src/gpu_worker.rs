@@ -3,18 +3,17 @@ use crate::ocl::GpuContext;
 use crate::ocl::{gpu_hash, gpu_transfer};
 use crate::reader::ReadReply;
 use crossbeam_channel::{Receiver, Sender};
-use futures::sync::mpsc;
-use futures::{Future, Sink};
 use std::sync::Arc;
 use std::u64;
+use tokio::sync::mpsc;
 
 pub fn create_gpu_worker_task(
     benchmark: bool,
     rx_read_replies: Receiver<ReadReply>,
     tx_empty_buffers: Sender<Box<dyn Buffer + Send>>,
-    tx_nonce_data: mpsc::Sender<NonceData>,
+    tx_nonce_data: mpsc::UnboundedSender<NonceData>,
     context_mu: Arc<GpuContext>,
-) -> impl FnOnce() {
+) -> impl FnOnce() + Send + 'static {
     move || {
         for read_reply in rx_read_replies {
             let buffer = read_reply.buffer;
@@ -23,23 +22,17 @@ pub fn create_gpu_worker_task(
                 // forward 'drive finished signal'
                 if read_reply.info.finished {
                     let deadline = u64::MAX;
-                    tx_nonce_data
-                        .clone()
-                        .send(NonceData {
-                            height: read_reply.info.height,
-                            block: read_reply.info.block,
-                            base_target: read_reply.info.base_target,
-                            deadline,
-                            nonce: 0,
-                            reader_task_processed: read_reply.info.finished,
-                            account_id: read_reply.info.account_id,
-                        })
-                        .wait()
-                        .expect("GPU worker failed to send nonce data");
+                    let _ = tx_nonce_data.send(NonceData {
+                        height: read_reply.info.height,
+                        block: read_reply.info.block,
+                        base_target: read_reply.info.base_target,
+                        deadline,
+                        nonce: 0,
+                        reader_task_processed: read_reply.info.finished,
+                        account_id: read_reply.info.account_id,
+                    });
                 }
-                tx_empty_buffers
-                    .send(buffer)
-                    .expect("GPU worker failed to cue empty buffer");
+                let _ = tx_empty_buffers.send(buffer);
                 continue;
             }
 
@@ -61,24 +54,21 @@ pub fn create_gpu_worker_task(
             let deadline = result.0;
             let offset = result.1;
 
-            tx_nonce_data
-                .clone()
-                .send(NonceData {
-                    height: read_reply.info.height,
-                    block: read_reply.info.block,
-                    base_target: read_reply.info.base_target,
-                    deadline,
-                    nonce: offset + read_reply.info.start_nonce,
-                    reader_task_processed: read_reply.info.finished,
-                    account_id: read_reply.info.account_id,
-                })
-                .wait()
-                .expect("GPU worker failed to cue empty buffer");
+            let _ = tx_nonce_data.send(NonceData {
+                height: read_reply.info.height,
+                block: read_reply.info.block,
+                base_target: read_reply.info.base_target,
+                deadline,
+                nonce: offset + read_reply.info.start_nonce,
+                reader_task_processed: read_reply.info.finished,
+                account_id: read_reply.info.account_id,
+            });
 
-            tx_empty_buffers.send(buffer).unwrap();
+            let _ = tx_empty_buffers.send(buffer);
         }
     }
 }
+
 
 #[cfg(test)]
 mod tests {
