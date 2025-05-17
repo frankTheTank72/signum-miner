@@ -39,7 +39,7 @@ jobs:
             output: signum-miner-avx512f.exe
           - target: aarch64-unknown-linux-gnu
             feature: neon
-            output: signum-miner-neon
+            output: signum-miner-aarch64-neon
 
     steps:
       - name: Checkout code
