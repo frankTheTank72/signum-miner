@@ -62,7 +62,7 @@ jobs:
         run: |
           ext=""
           [[ "${{ matrix.target }}" == *windows* ]] && ext=".exe"
-          cp target/${{ matrix.target }}/release/signum-miner${ext} signum-miner-avx512f${ext}
+          cp target/${{ matrix.target }}/release/signum-miner${ext} ${{ matrix.output }}
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
@@ -94,6 +94,7 @@ jobs:
         run: |
           mkdir release_files
           find ./artifacts -type f -exec cp {} release_files/ \;
+
 
       - name: Add config.yaml to release_files
         run: cp config.yaml release_files/config.yaml
