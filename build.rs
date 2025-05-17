@@ -2,8 +2,36 @@
 extern crate cc;
 use std::env;
 
+#[cfg(target_env = "gnu")]
+fn compile_windows_icon() {
+    let target = std::env::var("TARGET").unwrap_or_default();
+    if target.contains("windows") {
+        let out_dir = std::env::var("OUT_DIR").unwrap();
+
+        let rc_path = "src/windows/app.rc";
+        let ico_path = "src/windows/miner_logo.ico";
+        let res_path = format!("{}/icon.res", out_dir);
+
+        // Compile .rc file into .res
+        let status = std::process::Command::new("windres")
+            .args(&["--input", rc_path, "--output", &res_path, "--output-format=coff"])
+            .status()
+            .expect("failed to run windres");
+
+        if !status.success() {
+            panic!("windres failed with status {}", status);
+        }
+
+        // Link .res file
+        println!("cargo:rustc-link-arg-bin=signum-miner={}", res_path);
+    }
+}
+
 fn main() {
     let mut shared_config = cc::Build::new();
+    
+    #[cfg(target_env = "gnu")]
+    compile_windows_icon();
 
     // Apply optimization flags depending on compiler environment
     if cfg!(target_env = "msvc") {
