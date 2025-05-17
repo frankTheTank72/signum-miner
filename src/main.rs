@@ -70,6 +70,14 @@ cfg_if! {
             info!("SIMD extensions: SSE2");
             unsafe { init_shabal_sse2(); }
         }
+    }  else if #[cfg(feature = "neon")] {
+         extern "C" {
+            pub fn init_shabal_neon();
+        }
+        fn init_cpu_extensions() {
+            info!("SIMD extensions: neon");
+            unsafe { init_shabal_neon();}
+        }
     } else {
         fn init_cpu_extensions() {
             info!("SIMD extensions: none");
@@ -99,27 +107,7 @@ fn print_simd_support() {
         println!("✅ SSE2 supported");
     }
 }
-cfg_if! {
-    if #[cfg(feature = "neon")] {
-        extern "C" {
-            pub fn init_shabal_neon();
-        }
 
-        fn init_cpu_extensions() {
-            #[cfg(target_arch = "arm")]
-            let neon = is_arm_feature_detected!("neon");
-            #[cfg(target_arch = "aarch64")]
-            let neon = true;
-
-            if neon {
-                info!("SIMD extensions: NEON");
-                unsafe { init_shabal_neon(); }
-            } else {
-                info!("SIMD extensions: none");
-            }
-        }
-    }
-}
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
