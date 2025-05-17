@@ -84,7 +84,7 @@ cfg_if! {
         }
     }
 }
-
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn print_simd_support() {
     println!("SIMD support check:");
 
@@ -148,7 +148,10 @@ async fn main() {
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION")
     );
+    
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     print_simd_support();
+
     #[cfg(feature = "opencl")]
     info!("GPU extensions: OpenCL");
 
