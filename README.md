@@ -100,7 +100,6 @@ cd signum-miner
 # decide on features to run/build:
 simd: support for SSE2, AVX, AVX2 and AVX512F (x86_cpu)
 neon: support for Arm NEON (arm_cpu)
-opencl: support for OpenCL (gpu)
 
 # Build with desired features (choose one!)
 cargo build --release --no-default-features --features simd_avx
