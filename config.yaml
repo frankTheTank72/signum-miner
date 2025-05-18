@@ -33,7 +33,7 @@ target_deadline: 31536000             # default 31536000 (1 year)
 
 get_mining_info_interval: 3000        # default 3000ms
 timeout: 5000                         # default 5000ms
-send_proxy_details: true              # default true
+send_proxy_details: false              # default false
 submit_only_best: true                # default true
 #additional_headers:                  # add/overwrite html header
 #  "AccountKey" : "1234567890"
