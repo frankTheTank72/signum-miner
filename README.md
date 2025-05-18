@@ -3,7 +3,10 @@
 [![Build Status](https://github.com/signum-network/signum-miner/actions/workflows/release.yml/badge.svg)](https://github.com/signum-network/signum-miner/actions)
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 [![Telegram](https://img.shields.io/badge/chat-telegram-blue.svg)](https://t.me/signumnetwork)
-[![Get Support](https://img.shields.io/badge/join-discord-blue.svg)](https://discord.gg/9rH2bbCNpe)
+[![Get Support](https://img.shields.io/badge/join-discord-blue.svg)](https://discord.gg/9rH2bbCNpe) 
+</br>
+[![Website](https://img.shields.io/badge/Website-signum.network-green?logo=Firefox&logoColor=white)](https://signum.network)
+[![Docs](https://img.shields.io/badge/Docs-Mining%20Guide-blue?logo=Book&logoColor=white)](https://docs.signum.network/signum/starting-mining-signa)
 
 ---
 
@@ -17,7 +20,7 @@ Signum is the world's first truly sustainable blockchain — and the Signum Mine
 
 ## 🔧 **Features**
 
-- Ultra-low power mining algorithm (**Proof-of-Capacity Plus**)
+- Ultra-low energy-power mining algorithm (**Proof of Commitment (PoC+)**)
 - AVX512, AVX2, AVX, SSE2 and NEON **SIMD optimizations**
 - Multi-threaded & high performance I/O
 - Integrated plot reader, CPU miner & buffer pipeline
