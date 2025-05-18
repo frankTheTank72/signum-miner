@@ -165,6 +165,7 @@ impl Reader {
         }
     }
 
+    #[cfg(not(feature = "async_io"))]
     fn create_read_task(
         &self,
         pb: Option<Arc<Mutex<pbr::ProgressBar<Stdout>>>>,
@@ -335,6 +336,182 @@ impl Reader {
                     }
                 }
             }
+        })
+    }
+
+    #[cfg(feature = "async_io")]
+    fn create_read_task(
+        &self,
+        pb: Option<Arc<Mutex<pbr::ProgressBar<Stdout>>>>,
+        drive: String,
+        plots: Arc<Vec<Mutex<Plot>>>,
+        height: u64,
+        block: u64,
+        base_target: u64,
+        scoop: u32,
+        gensig: Arc<[u8; 32]>,
+        show_drive_stats: bool,
+    ) -> (Sender<()>, impl FnOnce()) {
+        let (tx_interupt, rx_interupt) = crossbeam_channel::unbounded();
+        let rx_empty_buffers = self.rx_empty_buffers.clone();
+        let tx_empty_buffers = self.tx_empty_buffers.clone();
+        let tx_read_replies_cpu = self.tx_read_replies_cpu.clone();
+        #[cfg(feature = "opencl")]
+        let tx_read_replies_gpu = self.tx_read_replies_gpu.clone();
+
+        (tx_interupt, move || {
+            tokio::spawn(async move {
+                let mut sw = Stopwatch::new();
+                let mut elapsed = 0i64;
+                let mut nonces_processed = 0u64;
+                let plot_count = plots.len();
+                'outer: for (i_p, p) in plots.iter().enumerate() {
+                    let mut p = p.lock().unwrap();
+                    if let Err(e) = p.prepare_async(scoop).await {
+                        error!(
+                            "reader: error preparing {} for reading: {} -> skip one round",
+                            p.meta.name,
+                            e
+                        );
+                        continue 'outer;
+                    }
+
+                    'inner: for mut buffer in rx_empty_buffers.clone() {
+                        if show_drive_stats {
+                            sw.restart();
+                        }
+                        let mut_bs = buffer.get_buffer_for_writing();
+                        let mut bs = mut_bs.lock().unwrap();
+                        let (bytes_read, start_nonce, next_plot) = match p.read_async(&mut bs, scoop).await {
+                            Ok(x) => x,
+                            Err(e) => {
+                                error!(
+                                    "reader: error reading chunk from {}: {} -> skip one round",
+                                    p.meta.name,
+                                    e
+                                );
+                                buffer.unmap();
+                                (0, 0, true)
+                            }
+                        };
+
+                        if rx_interupt.try_recv().is_ok() {
+                            buffer.unmap();
+                            tx_empty_buffers.send(buffer).unwrap();
+                            break 'outer;
+                        }
+
+                        let finished = i_p == (plot_count - 1) && next_plot;
+                        #[cfg(feature = "opencl")]
+                        match buffer.get_id() {
+                            0 => {
+                                tx_read_replies_cpu
+                                    .send(ReadReply {
+                                        buffer,
+                                        info: BufferInfo {
+                                            len: bytes_read,
+                                            height,
+                                            block,
+                                            base_target,
+                                            gensig: gensig.clone(),
+                                            start_nonce,
+                                            finished,
+                                            account_id: p.meta.account_id,
+                                            gpu_signal: 0,
+                                        },
+                                    })
+                                    .expect("failed to send read data to CPU thread");
+                            }
+                            i => {
+                                tx_read_replies_gpu.as_ref().unwrap()[i - 1]
+                                    .send(ReadReply {
+                                        buffer,
+                                        info: BufferInfo {
+                                            len: bytes_read,
+                                            height,
+                                            block,
+                                            base_target,
+                                            gensig: gensig.clone(),
+                                            start_nonce,
+                                            finished,
+                                            account_id: p.meta.account_id,
+                                            gpu_signal: 0,
+                                        },
+                                    })
+                                    .expect("failed to send read data to GPU thread A");
+                            }
+                        }
+                        #[cfg(not(feature = "opencl"))]
+                        tx_read_replies_cpu
+                            .send(ReadReply {
+                                buffer,
+                                info: BufferInfo {
+                                    len: bytes_read,
+                                    height,
+                                    block,
+                                    base_target,
+                                    gensig: gensig.clone(),
+                                    start_nonce,
+                                    finished,
+                                    account_id: p.meta.account_id,
+                                    gpu_signal: 0,
+                                },
+                            })
+                            .unwrap();
+
+                        nonces_processed += bytes_read as u64 / 64;
+
+                        match &pb {
+                            Some(pb) => {
+                                let mut pb = pb.lock().unwrap();
+                                pb.add(bytes_read as u64);
+                            }
+                            None => (),
+                        }
+
+                        if show_drive_stats {
+                            elapsed += sw.elapsed_ms();
+                        }
+
+                        if finished {
+                            #[cfg(feature = "opencl")]
+                            for i in 0..tx_read_replies_gpu.as_ref().unwrap().len() {
+                                tx_read_replies_gpu.as_ref().unwrap()[i]
+                                    .send(ReadReply {
+                                        buffer: Box::new(CpuBuffer::new(0)) as Box<dyn Buffer + Send>,
+                                        info: BufferInfo {
+                                            len: 1,
+                                            height,
+                                            block,
+                                            base_target,
+                                            gensig: gensig.clone(),
+                                            start_nonce: 0,
+                                            finished: false,
+                                            account_id: 0,
+                                            gpu_signal: 2,
+                                        },
+                                    })
+                                    .expect("Error sending 'drive finished' signal to GPU thread A");
+                            }
+                        }
+
+                        if finished && show_drive_stats {
+                            info!(
+                                "{: <80}",
+                                format!(
+                                    "drive {} finished, speed={} MiB/s",
+                                    drive,
+                                    nonces_processed * 1000 / (elapsed + 1) as u64 * 64 / 1024 / 1024,
+                                )
+                            );
+                        }
+
+                        if next_plot {
+                            break 'inner;
+                        }
+                    }
+                }
+            });
         })
     }
 }

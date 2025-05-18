@@ -4,8 +4,16 @@ use std::cmp::{max, min};
 use std::error::Error;
 use std::fs;
 use std::fs::{File, OpenOptions};
+#[cfg(feature = "async_io")]
+use tokio::fs::File as TokioFile;
+#[cfg(not(feature = "async_io"))]
+use std::fs::File as TokioFile;
+#[cfg(feature = "async_io")]
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use std::io;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{SeekFrom};
+#[cfg(not(feature = "async_io"))]
+use std::io::{Read, Seek};
 use std::path::{Path, PathBuf};
 
 const SCOOPS_IN_NONCE: u64 = 4096;
@@ -44,7 +52,7 @@ impl Meta {
 pub struct Plot {
     pub meta: Meta,
     pub path: String,
-    pub fh: File,
+    pub fh: TokioFile,
     read_offset: u64,
     use_direct_io: bool,
     sector_size: u64,
@@ -121,10 +129,16 @@ impl Plot {
             )));
         }
 
-        let fh = if use_direct_io {
+        let fh_std = if use_direct_io {
             open_using_direct_io(path)?
         } else {
             open(path)?
+        };
+        let fh = {
+            #[cfg(feature = "async_io")]
+            { TokioFile::from_std(fh_std) }
+            #[cfg(not(feature = "async_io"))]
+            { fh_std }
         };
 
         let plot_file_name = plot_file.to_string();
@@ -173,6 +187,27 @@ impl Plot {
         self.fh.seek(SeekFrom::Start(seek_addr))
     }
 
+    #[cfg(feature = "async_io")]
+    pub async fn prepare_async(&mut self, scoop: u32) -> io::Result<u64> {
+        self.read_offset = 0;
+        let nonces = self.meta.nonces;
+        let mut seek_addr = u64::from(scoop) * nonces as u64 * SCOOP_SIZE;
+
+        if !self.use_direct_io {
+            let f = open(&self.path)?;
+            self.fh = TokioFile::from_std(f);
+        } else {
+            let f = open_using_direct_io(&self.path)?;
+            self.fh = TokioFile::from_std(f);
+        };
+
+        if self.use_direct_io {
+            self.read_offset = self.round_seek_addr(&mut seek_addr);
+        }
+
+        self.fh.seek(SeekFrom::Start(seek_addr)).await
+    }
+
     pub fn read(&mut self, bs: &mut Vec<u8>, scoop: u32) -> Result<(usize, u64, bool), io::Error> {
         let read_offset = self.read_offset;
         let buffer_cap = bs.capacity();
@@ -208,6 +243,45 @@ impl Plot {
             //         &mut bs[i..(i + min(read_chunk_size_in_nonces, bytes_to_read - i))],
             //     )?;
             // }
+        }
+        self.read_offset += bytes_to_read as u64;
+
+        Ok((bytes_to_read, start_nonce, finished))
+    }
+
+    #[cfg(feature = "async_io")]
+    pub async fn read_async(
+        &mut self,
+        bs: &mut Vec<u8>,
+        scoop: u32,
+    ) -> Result<(usize, u64, bool), io::Error> {
+        let read_offset = self.read_offset;
+        let buffer_cap = bs.capacity();
+        let start_nonce = self.meta.start_nonce + self.read_offset / 64;
+
+        let (bytes_to_read, finished) = if read_offset as usize + buffer_cap
+            >= (SCOOP_SIZE * self.meta.nonces) as usize
+        {
+            let mut bytes_to_read = (SCOOP_SIZE * self.meta.nonces) as usize
+                - self.read_offset as usize;
+            if self.use_direct_io {
+                let r = bytes_to_read % self.sector_size as usize;
+                if r != 0 {
+                    bytes_to_read -= r;
+                }
+            }
+            (bytes_to_read, true)
+        } else {
+            (buffer_cap as usize, false)
+        };
+
+        let offset = self.read_offset;
+        let nonces = self.meta.nonces;
+        let seek_addr =
+            SeekFrom::Start(offset as u64 + u64::from(scoop) * nonces as u64 * SCOOP_SIZE);
+        if !self.dummy {
+            self.fh.seek(seek_addr).await?;
+            self.fh.read_exact(&mut bs[0..bytes_to_read]).await?;
         }
         self.read_offset += bytes_to_read as u64;
 

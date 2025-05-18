@@ -22,6 +22,7 @@ simd_avx512f = ["simd"]
 simd_sse2 = ["simd"]
 neon = []
 opencl = ["ocl-core"]
+async_io = []
 
 [dependencies]
 embed-resource = "2.4"
