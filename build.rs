@@ -10,7 +10,6 @@ fn compile_windows_icon() {
         let out_dir = std::env::var("OUT_DIR").unwrap();
 
         let rc_path = "src/windows/app.rc";
-        let ico_path = "src/windows/miner_logo.ico";
         let res_path = format!("{}/icon.res", out_dir);
 
         // Compile .rc file into .res
