@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use crate::plot::SCOOP_SIZE;
 
 #[derive(Debug, Serialize)]
 pub enum Benchmark {
@@ -37,6 +38,9 @@ pub struct Cfg {
 
     #[serde(default = "default_cpu_nonces_per_cache")]
     pub cpu_nonces_per_cache: usize,
+
+    #[serde(default = "default_io_buffer_size")]
+    pub io_buffer_size: usize,
 
     #[serde(default = "default_cpu_thread_pinning")]
     pub cpu_thread_pinning: bool,
@@ -152,6 +156,10 @@ fn default_cpu_nonces_per_cache() -> usize {
     65536
 }
 
+fn default_io_buffer_size() -> usize {
+    4 * 1024 * 1024
+}
+
 fn default_cpu_thread_pinning() -> bool {
     false
 }
@@ -248,8 +256,9 @@ pub fn load_cfg(config: &str) -> Cfg {
     let cfg_str = fs::read_to_string(config).expect("failed to open config");
     let cfg: Cfg = serde_yaml::from_str(&cfg_str).expect("failed to parse config");
     if cfg.hdd_use_direct_io {
+        let cpu_nonces_per_cache = cfg.io_buffer_size / SCOOP_SIZE as usize;
         assert!(
-            cfg.cpu_nonces_per_cache % 64 == 0 && cfg.gpu_nonces_per_cache % 64 == 0,
+            cpu_nonces_per_cache % 64 == 0 && cfg.gpu_nonces_per_cache % 64 == 0,
             "nonces_per_cache should be divisible by 64 when using direct io"
         );
     }
