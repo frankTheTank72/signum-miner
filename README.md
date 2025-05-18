@@ -23,7 +23,7 @@ Signum is the world's first truly sustainable blockchain — and the Signum Mine
 - Integrated plot reader, CPU miner & buffer pipeline
 - Full async + **Tokio** + **crossbeam** architecture
 
-## 🧰**Feature Overview**
+## 🧰 **Feature Overview**
 
 | Architecture     | Feature(s)               | Description                            |
 |------------------|--------------------------|----------------------------------------|
