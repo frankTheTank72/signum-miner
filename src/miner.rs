@@ -14,7 +14,7 @@ use crate::plot::{Plot, SCOOP_SIZE};
 use crate::poc_hashing;
 use crate::reader::Reader;
 use crate::requests::RequestHandler;
-use crate::utils::{get_device_id, new_thread_pool};
+use crate::utils::{get_bus_type, get_device_id, new_thread_pool};
 use crossbeam_channel;
 use filetime::FileTime;
 use futures_util::{stream::StreamExt};
@@ -197,12 +197,14 @@ fn scan_plots(
     let mut global_capacity: u64 = 0;
 
     for plot_dir in plot_dirs {
+        let bus_type = get_bus_type(plot_dir.to_str().unwrap());
+        let is_usb = bus_type.to_lowercase() == "usb" || bus_type.to_lowercase() == "removable";
         let mut num_plots = 0;
         let mut local_capacity: u64 = 0;
         for file in read_dir(plot_dir).unwrap() {
             let file = &file.unwrap().path();
 
-            if let Ok(p) = Plot::new(file, use_direct_io, dummy) {
+            if let Ok(p) = Plot::new(file, use_direct_io && !is_usb, dummy) {
                 let drive_id = get_device_id(&file.to_str().unwrap().to_string());
                 let plots = drive_id_to_plots.entry(drive_id).or_insert(Vec::new());
 
@@ -213,10 +215,11 @@ fn scan_plots(
         }
 
         info!(
-            "path={}, files={}, size={:.4} TiB",
+            "path={}, files={}, size={:.4} TiB{}",
             plot_dir.to_str().unwrap(),
             num_plots,
-            local_capacity as f64 / 4.0 / 1024.0 / 1024.0
+            local_capacity as f64 / 4.0 / 1024.0 / 1024.0,
+            if is_usb { " (USB)" } else { "" }
         );
 
         global_capacity += local_capacity;
