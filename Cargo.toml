@@ -26,7 +26,7 @@ opencl = ["ocl-core"]
 [dependencies]
 embed-resource = "2.4"
 pin-project = "1"
-cfg-if = "0.1"
+cfg-if = "1.0"
 clap = "4.5.37"
 core_affinity = "0.8.3"
 crossbeam-channel = "0.3"
@@ -62,7 +62,7 @@ winapi = { version = "0.3", features = ["fileapi"] }
 
 [build-dependencies]
 cc = "1.0"
-cfg-if = "0.1"
+cfg-if = "1.0"
 
 [profile.release]
 opt-level = 'z'     # Optimize for size.
