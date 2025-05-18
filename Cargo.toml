@@ -9,7 +9,7 @@ A fast and flexible miner for the Signum blockchain.
 build = "build.rs"
 repository = "https://github.com/signum-network/signum-miner"
 documentation = "https://github.com/signum-network/signum-miner"
-keywords = ["poc", "miner", "rust","cryptocurrency"]
+keywords = ["signum","signa","pocplus", "miner", "rust","cryptocurrency","sustainable","ecofriendly"]
 readme = "README.md"
 edition = "2021"
 
@@ -24,6 +24,7 @@ neon = []
 opencl = ["ocl-core"]
 
 [dependencies]
+embed-resource = "2.4"
 pin-project = "1"
 cfg-if = "0.1"
 clap = "4.5.37"
