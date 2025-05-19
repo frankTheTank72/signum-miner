@@ -1,5 +1,4 @@
-use bytes::Buf;
-use reqwest::r#async::Chunk;
+use bytes::Bytes;
 use serde::de::{self, DeserializeOwned};
 use std::fmt;
 
@@ -79,7 +78,6 @@ impl From<PoolError> for FetchError {
     }
 }
 
-// MOTHERFUCKING pool
 fn from_str_or_int<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: de::Deserializer<'de>,
@@ -105,10 +103,10 @@ where
     deserializer.deserialize_any(StringOrIntVisitor)
 }
 
-pub fn parse_json_result<T: DeserializeOwned>(body: &Chunk) -> Result<T, PoolError> {
-    match serde_json::from_slice(body.bytes()) {
+pub fn parse_json_result<T: DeserializeOwned>(body: &Bytes) -> Result<T, PoolError> {
+    match serde_json::from_slice(body) {
         Ok(x) => Ok(x),
-        _ => match serde_json::from_slice::<PoolErrorWrapper>(body.bytes()) {
+        _ => match serde_json::from_slice::<PoolErrorWrapper>(body) {
             Ok(x) => Err(x.error),
             _ => {
                 let v = body.to_vec();

@@ -1,6 +1,6 @@
 [package]
 name = "signum-miner"
-version = "1.9.1"
+version = "2.0.0"
 license = "GPL-3.0"
 authors = ["signum-network, forked from PoC Consortium"]
 description = """
@@ -9,22 +9,31 @@ A fast and flexible miner for the Signum blockchain.
 build = "build.rs"
 repository = "https://github.com/signum-network/signum-miner"
 documentation = "https://github.com/signum-network/signum-miner"
-keywords = ["poc", "miner", "rust","cryptocurrency"]
+keywords = ["signum","signa","pocplus", "miner", "rust","cryptocurrency","sustainable","ecofriendly"]
 readme = "README.md"
 edition = "2021"
 
 [features]
+default = ["simd_avx2"]
 simd = []
+simd_avx = ["simd"]
+simd_avx2 = ["simd"]
+simd_avx512f = ["simd"]
+simd_sse2 = ["simd"]
 neon = []
 opencl = ["ocl-core"]
 
 [dependencies]
-cfg-if = "0.1"
+embed-resource = "2.4"
+pin-project = "1"
+cfg-if = "1.0"
 clap = "4.5.37"
 core_affinity = "0.8.3"
 crossbeam-channel = "0.5"
 filetime = "0.2"
-futures = "0.1"
+futures = "0.3"
+futures-core = "0.3"
+futures-util = "0.3"
 hex = "0.3"
 hostname = "0.4.1"
 libc = "0.2"
@@ -40,19 +49,20 @@ serde_derive = "1.0"
 serde_json = "1.0"
 serde_yaml = "0.9"
 stopwatch = "0.0.7"
-tokio = "0.1"
-url = "1.7"
+tokio = { version = "1.37", features = ["full","test-util"] }
+tokio-stream = "0.1"
+url = { version = "2", features = ["serde"] }
 page_size = "0.6.0"
-reqwest = { version = "0.9.9", default-features = false, features = ["rustls-tls"] }
-bytes = "0.4.11"
-url_serde = "0.2"
+reqwest = { version = "0.12.15", default-features = false, features = ["rustls-tls"] }
+bytes = "1.10.1"
+
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["fileapi"] }
 
 [build-dependencies]
 cc = "1.0"
-cfg-if = "0.1"
+cfg-if = "1.0"
 
 [profile.release]
 opt-level = 'z'     # Optimize for size.

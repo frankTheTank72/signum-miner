@@ -12,7 +12,34 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-gnu, x86_64-pc-windows-gnu, aarch64-unknown-linux-gnu]
+        include:
+          - target: x86_64-unknown-linux-gnu
+            feature: simd_sse2
+            output: signum-miner-sse2
+          - target: x86_64-unknown-linux-gnu
+            feature: simd_avx
+            output: signum-miner-avx
+          - target: x86_64-unknown-linux-gnu
+            feature: simd_avx2
+            output: signum-miner-avx2
+          - target: x86_64-unknown-linux-gnu
+            feature: simd_avx512f
+            output: signum-miner-avx512f
+          - target: x86_64-pc-windows-gnu
+            feature: simd_sse2
+            output: signum-miner-sse2.exe
+          - target: x86_64-pc-windows-gnu
+            feature: simd_avx
+            output: signum-miner-avx.exe
+          - target: x86_64-pc-windows-gnu
+            feature: simd_avx2
+            output: signum-miner-avx2.exe
+          - target: x86_64-pc-windows-gnu
+            feature: simd_avx512f
+            output: signum-miner-avx512f.exe
+          - target: aarch64-unknown-linux-gnu
+            feature: neon
+            output: signum-miner-aarch64-neon
 
     steps:
       - name: Checkout code
@@ -28,30 +55,24 @@ jobs:
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
 
-      - name: Build with cross
-        run: cross build --release --target ${{ matrix.target }}
+      - name: Install mingw-w64 for windres
+        if: contains(matrix.target, 'windows-gnu')
+        run: sudo apt-get update && sudo apt-get install -y binutils-mingw-w64
 
-      - name: Rename binaries
+      - name: Build with cross and feature
+        run: cross build --release --target ${{ matrix.target }}  --no-default-features --features ${{ matrix.feature }}
+
+      - name: Rename binary
         run: |
-          case "${{ matrix.target }}" in
-            x86_64-unknown-linux-gnu)
-              cp target/${{ matrix.target }}/release/signum-miner signum-miner
-              ;;
-            aarch64-unknown-linux-gnu)
-              cp target/${{ matrix.target }}/release/signum-miner signum-miner-aarch64
-              ;;
-            x86_64-pc-windows-gnu)
-              cp target/${{ matrix.target }}/release/signum-miner.exe signum-miner.exe
-              ;;
-          esac
-
+          ext=""
+          [[ "${{ matrix.target }}" == *windows* ]] && ext=".exe"
+          cp target/${{ matrix.target }}/release/signum-miner${ext} ${{ matrix.output }}
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: signum-miner-${{ matrix.target }}
-          path: |
-            target/${{ matrix.target }}/release/signum-miner*
+          name: ${{ matrix.output }}
+          path: ${{ matrix.output }}
         if: success()
 
   release:
@@ -76,10 +97,9 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir release_files
-          cp artifacts/signum-miner-x86_64-unknown-linux-gnu/signum-miner release_files/signum-miner
-          cp artifacts/signum-miner-aarch64-unknown-linux-gnu/signum-miner release_files/signum-miner-aarch64
-          cp artifacts/signum-miner-x86_64-pc-windows-gnu/signum-miner.exe release_files/signum-miner.exe
-        
+          find ./artifacts -type f -exec cp {} release_files/ \;
+
+
       - name: Add config.yaml to release_files
         run: cp config.yaml release_files/config.yaml
 
@@ -89,9 +109,6 @@ jobs:
           draft: true
           tag_name: ${{ github.event.inputs.release_tag }}
           files: |
-            release_files/signum-miner
-            release_files/signum-miner-aarch64
-            release_files/signum-miner.exe
-            release_files/config.yaml
+            release_files/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

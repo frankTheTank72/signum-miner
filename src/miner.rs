@@ -17,7 +17,9 @@ use crate::requests::RequestHandler;
 use crate::utils::{get_device_id, new_thread_pool};
 use crossbeam_channel;
 use filetime::FileTime;
-use futures::sync::mpsc;
+use futures_util::{stream::StreamExt};
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 #[cfg(feature = "opencl")]
 use ocl_core::Mem;
 use std::cmp::{max, min};
@@ -26,12 +28,16 @@ use std::fs::read_dir;
 use std::path::PathBuf;
 use std::process;
 use std::sync::{Arc, Mutex};
+//use std::sync::Arc;
+//use tokio::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use std::u64;
 use stopwatch::Stopwatch;
-use tokio::prelude::*;
-use tokio::runtime::TaskExecutor;
+use tokio::runtime::Handle;
+use std::alloc::{alloc_zeroed, Layout};
+use page_size;
+
 
 pub struct Miner {
     reader: Reader,
@@ -42,7 +48,7 @@ pub struct Miner {
     state: Arc<Mutex<State>>,
     reader_task_count: usize,
     get_mining_info_interval: u64,
-    executor: TaskExecutor,
+    executor: Handle,
     wakeup_after: i64,
     submit_only_best: bool,
 }
@@ -137,7 +143,23 @@ pub struct CpuBuffer {
 
 impl CpuBuffer {
     pub fn new(buffer_size: usize) -> Self {
-        let data = vec![0u8; buffer_size]; // Create a vector with the specified size, initialized to zero
+        let alignment = page_size::get();
+        let layout = Layout::from_size_align(buffer_size, alignment)
+            .expect("Invalid layout");
+
+        // SAFETY: caller must free this memory, and `Vec::from_raw_parts` must match
+        let raw_ptr = unsafe { alloc_zeroed(layout) };
+
+        if raw_ptr.is_null() {
+            panic!("Aligned allocation failed");
+        }
+
+        // SAFETY:
+        // - raw_ptr must be non-null and valid for `buffer_size` bytes
+        // - memory must be initialized (we used alloc_zeroed)
+        let data = unsafe {
+            Vec::from_raw_parts(raw_ptr, buffer_size, buffer_size)
+        };
 
         CpuBuffer {
             data: Arc::new(Mutex::new(data)),
@@ -225,11 +247,12 @@ fn scan_plots(
 }
 
 impl Miner {
-    pub fn new(cfg: Cfg, executor: TaskExecutor) -> Miner {
+    pub fn new(cfg: Cfg, executor: Handle) -> Miner {
         let (drive_id_to_plots, total_size) =
             scan_plots(&cfg.plot_dirs, cfg.hdd_use_direct_io, cfg.benchmark_cpu());
 
-        let cpu_threads = cfg.cpu_threads;
+        let cpu_threads = cfg.cpu_threads.max(1);
+        info!("🖥️  Using {} CPU thread(s)", cpu_threads);
         let cpu_worker_task_count = cfg.cpu_worker_task_count;
 
         let cpu_buffer_count = cpu_worker_task_count
@@ -265,7 +288,7 @@ impl Miner {
                 "reader-threads={}, CPU-threads={}, GPU-threads={}",
                 reader_thread_count, cpu_threads, gpu_threads,
             );
-
+            info!("→ Starting now");
             info!(
                 "CPU-buffer={}(+{}), GPU-buffer={}(+{})",
                 cpu_worker_task_count,
@@ -452,7 +475,8 @@ impl Miner {
         }
     }
 
-    pub fn run(self) {
+    pub async fn run(self) {
+        use tokio::time::{sleep, Duration};
         let request_handler = self.request_handler.clone();
         let total_size = self.reader.total_size;
 
@@ -460,17 +484,21 @@ impl Miner {
         // reader from miner so that we can simply move it
         let reader = Arc::new(Mutex::new(self.reader));
 
+
         let state = self.state.clone();
         // there might be a way to solve this without two nested moves
         let get_mining_info_interval = self.get_mining_info_interval;
         let wakeup_after = self.wakeup_after;
-        self.executor.clone().spawn(
+        tokio::spawn(async move {
+            info!("→ Interval task started");
             Interval::new_interval(Duration::from_millis(get_mining_info_interval))
                 .for_each(move |_| {
                     let state = state.clone();
                     let reader = reader.clone();
-                    request_handler.get_mining_info().then(move |mining_info| {
-                        match mining_info {
+                    let request_handler = request_handler.clone();
+                    async move {
+                        let mining_info = request_handler.get_mining_info();
+                        match mining_info.await {
                             Ok(mining_info) => {
                                 let mut state = state.lock().unwrap();
                                 state.first = false;
@@ -480,7 +508,6 @@ impl Miner {
                                 }
                                 if mining_info.generation_signature != state.generation_signature {
                                     state.update_mining_info(&mining_info);
-
                                     reader.lock().unwrap().start_reading(
                                         mining_info.height,
                                         state.block,
@@ -507,22 +534,19 @@ impl Miner {
                                     );
                                     state.first = false;
                                     state.outage = true;
-                                } else {
-                                    if !state.outage {
-                                        error!(
-                                            "{: <80}",
-                                            "error getting mining info => connection outage..."
-                                        );
-                                    }
+                                } else if !state.outage {
+                                    error!(
+                                        "{: <80}",
+                                        "error getting mining info => connection outage..."
+                                    );
                                     state.outage = true;
                                 }
                             }
                         }
-                        future::ok(())
-                    })
+                    }
                 })
-                .map_err(|e| panic!("interval errored: err={:?}", e)),
-        );
+                .await; 
+        });
 
         // only start submitting nonces after a while
         let mut best_nonce_data = NonceData {
@@ -542,7 +566,7 @@ impl Miner {
         let reader_task_count = self.reader_task_count;
         let inner_submit_only_best = self.submit_only_best;
         self.executor.clone().spawn(
-            self.rx_nonce_data
+            ReceiverStream::new(self.rx_nonce_data)
                 .for_each(move |nonce_data| {
                     let mut state = state.lock().unwrap();
 
@@ -615,9 +639,12 @@ impl Miner {
                             }
                         }
                     }
-                    Ok(())
-                })
-                .map_err(|e| panic!("interval errored: err={:?}", e)),
+                    futures_util::future::ready(())
+                }),
         );
+        loop {
+        sleep(Duration::from_secs(60)).await;
+        }
     }
+
 }

@@ -1,11 +1,7 @@
 use crate::com::api::*;
-use futures::stream::Stream;
-use futures::Future;
-use reqwest::header::{HeaderMap, HeaderName};
-use reqwest::r#async::{Client as InnerClient, ClientBuilder, Decoder};
+use reqwest::{Client as InnerClient, header::{HeaderMap, HeaderName}};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
 use url::form_urlencoded::byte_serialize;
@@ -22,7 +18,7 @@ pub struct Client {
     headers: Arc<HeaderMap>,
 }
 
-/// Parameters ussed for nonce submission.
+/// Parameters used for nonce submission.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SubmissionParameters {
     pub account_id: u64,
@@ -35,9 +31,6 @@ pub struct SubmissionParameters {
 }
 
 /// Usefull for deciding which submission parameters are the newest and best.
-/// We always cache the currently best submission parameters and on fail
-/// resend them with an exponential backoff. In the meantime if we get better
-/// parameters the old ones need to be replaced.
 impl Ord for SubmissionParameters {
     fn cmp(&self, other: &Self) -> Ordering {
         if self.block < other.block {
@@ -45,14 +38,12 @@ impl Ord for SubmissionParameters {
         } else if self.block > other.block {
             Ordering::Greater
         } else if self.gen_sig == other.gen_sig {
-            // on the same chain, best deadline wins
             if self.deadline <= other.deadline {
                 Ordering::Greater
             } else {
                 Ordering::Less
             }
         } else {
-            // switched to a new chain
             Ordering::Less
         }
     }
@@ -64,12 +55,9 @@ impl PartialOrd for SubmissionParameters {
     }
 }
 
-/// Whether to send additional data for Proxies.
 #[derive(Clone, PartialEq, Debug)]
 pub enum ProxyDetails {
-    /// Send additional data like capacity, miner name, ...
     Enabled,
-    /// Don't send any additional data:
     Disabled,
 }
 
@@ -86,18 +74,21 @@ impl Client {
         let ua = Client::ua();
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", ua.to_owned().parse().unwrap());
+
         if proxy_details == ProxyDetails::Enabled {
-            // It's amazing how a user agent is just not enough.
             headers.insert("X-Capacity", total_size_gb.to_string().parse().unwrap());
             headers.insert("X-Miner", ua.to_owned().parse().unwrap());
 
             let hostname = get()
                 .ok()
                 .and_then(|h| h.into_string().ok())
-                .unwrap_or_else(|| "".to_owned());
+                .unwrap_or_default();
 
             headers.insert("X-Minername", hostname.parse().unwrap());
-            headers.insert("X-Plotfile", format!("signum-miner-proxy/{}", hostname).parse().unwrap());
+            headers.insert(
+                "X-Plotfile",
+                format!("signum-miner-proxy/{}", hostname).parse().unwrap(),
+            );
         }
 
         for (key, value) in additional_headers {
@@ -108,7 +99,6 @@ impl Client {
         headers
     }
 
-    /// Create a new client communicating with Pool/Proxy/Wallet.
     pub fn new(
         base_uri: Url,
         mut secret_phrases: HashMap<u64, String>,
@@ -121,10 +111,9 @@ impl Client {
             *secret_phrase = byte_serialize(secret_phrase.as_bytes()).collect();
         }
 
-        let headers =
-            Client::submit_nonce_headers(proxy_details, total_size_gb, additional_headers);
+        let headers = Client::submit_nonce_headers(proxy_details, total_size_gb, additional_headers);
 
-        let client = ClientBuilder::new()
+        let client = InnerClient::builder()
             .timeout(Duration::from_millis(timeout))
             .build()
             .unwrap();
@@ -138,62 +127,53 @@ impl Client {
         }
     }
 
-    /// Get current mining info.
-    pub fn get_mining_info(&self) -> impl Future<Item = MiningInfoResponse, Error = FetchError> {
-        self.inner
-            .get(self.uri_for("burst"))
-            .headers((*self.headers).clone())
-            .query(&GetMiningInfoRequest {
-                request_type: &"getMiningInfo",
-            })
-            .send()
-            .and_then(|mut res| {
-                let body = mem::replace(res.body_mut(), Decoder::empty());
-                body.concat2()
-            })
-            .from_err::<FetchError>()
-            .and_then(|body| match parse_json_result(&body) {
-                Ok(x) => Ok(x),
-                Err(e) => Err(e.into()),
-            })
-    }
-
     pub fn uri_for(&self, path: &str) -> Url {
         let mut url = self.base_uri.clone();
         url.path_segments_mut()
-            .map_err(|_| "cannot be base")
-            .unwrap()
+            .expect("cannot be base")
             .pop_if_empty()
             .push(path);
         url
     }
 
-    /// Submit nonce to the pool and get the corresponding deadline.
-    pub fn submit_nonce(
+    pub async fn get_mining_info(&self) -> Result<MiningInfoResponse, FetchError> {
+        let res = self
+            .inner
+            .get(self.uri_for("burst"))
+            .headers((*self.headers).clone())
+            .query(&GetMiningInfoRequest {
+                request_type: "getMiningInfo",
+            })
+            .send()
+            .await?
+            .bytes()
+            .await?;
+
+        parse_json_result(&res).map_err(FetchError::from)
+    }
+
+    pub async fn submit_nonce(
         &self,
         submission_data: &SubmissionParameters,
-    ) -> impl Future<Item = SubmitNonceResponse, Error = FetchError> {
+    ) -> Result<SubmitNonceResponse, FetchError> {
         let empty = "".to_owned();
         let secret_phrase = self
             .account_id_to_secret_phrase
-            .get(&submission_data.account_id).unwrap_or(&empty);
+            .get(&submission_data.account_id)
+            .unwrap_or(&empty);
 
         let mut query = format!(
             "requestType=submitNonce&accountId={}&nonce={}&secretPhrase={}&blockheight={}",
-            submission_data.account_id, submission_data.nonce, secret_phrase, submission_data.height
+            submission_data.account_id,
+            submission_data.nonce,
+            secret_phrase,
+            submission_data.height
         );
 
-        // If we don't have a secret phrase then we most likely talk to a pool or a proxy.
-        // Both can make use of the deadline, e.g. a proxy won't validate deadlines but still
-        // needs to rank the deadlines.
-        // The best thing is that legacy proxies use the unadjusted deadlines so...
-        // yay another parameter!
-        if secret_phrase == "" {
+        if secret_phrase.is_empty() {
             query += &format!("&deadline={}", submission_data.deadline_unadjusted);
-        }        
+        }
 
-        // Some "Extrawurst" for the CreepMiner proxy (I think?) which needs the deadline inside
-        // the "X-Deadline" header.
         let mut headers = (*self.headers).clone();
         headers.insert(
             "X-Deadline",
@@ -203,31 +183,28 @@ impl Client {
         let mut uri = self.uri_for("burst");
         uri.set_query(Some(&query));
 
-        self.inner
+        let res = self
+            .inner
             .post(uri)
             .headers(headers)
             .send()
-            .and_then(|mut res| {
-                let body = mem::replace(res.body_mut(), Decoder::empty());
-                body.concat2()
-            })
-            .from_err::<FetchError>()
-            .and_then(|body| match parse_json_result(&body) {
-                Ok(x) => Ok(x),
-                Err(e) => Err(e.into()),
-            })
+            .await?
+            .bytes()
+            .await?;
+
+        parse_json_result(&res).map_err(FetchError::from)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio;
+    use std::collections::HashMap;
 
     static BASE_URL: &str = "https://europe.signum.network/";
 
-    #[test]
-    fn test_submit_params_cmp() {
+    #[tokio::test]
+    async fn test_submit_params_cmp() {
         let submit_params_1 = SubmissionParameters {
             account_id: 1337,
             nonce: 12,
@@ -256,14 +233,13 @@ mod tests {
         assert!(submit_params_1 > submit_params_2);
     }
 
-    #[test]
-    fn test_requests() {
-        let mut rt = tokio::runtime::Runtime::new().expect("can't create runtime");
-
+    #[tokio::test]
+    async fn test_get_mining_info_and_submit_nonce() {
         let mut secret = HashMap::new();
-        secret.insert(1337u64,"secret".to_owned());
+        secret.insert(1337u64, "secret".to_owned());
+
         let client = Client::new(
-            BASE_URL.parse().unwrap(),
+            Url::parse(BASE_URL).unwrap(),
             secret,
             5000,
             12,
@@ -271,24 +247,22 @@ mod tests {
             HashMap::new(),
         );
 
-        let height = match rt.block_on(client.get_mining_info()) {
-            Err(e) => panic!("can't get mining info: {:?}", e),
-            Ok(mining_info) => mining_info.height,
-        };
+        let mining_info = client
+            .get_mining_info()
+            .await
+            .expect("Failed to fetch mining info");
 
-        // this fails if pinocchio switches to a new block height in the meantime
-        let nonce_submission_response = rt.block_on(client.submit_nonce(&SubmissionParameters {
+        let submission = SubmissionParameters {
             account_id: 1337,
             nonce: 12,
-            height,
+            height: mining_info.height,
             block: 1,
             deadline_unadjusted: 7123,
             deadline: 1193,
             gen_sig: [0; 32],
-        }));
+        };
 
-        if let Err(e) = nonce_submission_response {
-            assert!(false, "can't submit nonce: {:?}", e);
-        }
+        let result = client.submit_nonce(&submission).await;
+        assert!(result.is_ok(), "submit_nonce failed: {:?}", result.err());
     }
 }
