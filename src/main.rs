@@ -31,6 +31,7 @@ mod ocl;
 use crate::config::load_cfg;
 use crate::miner::Miner;
 use clap::{Arg, Command};
+#[cfg(feature = "opencl")]
 use std::process;
 
 cfg_if! {

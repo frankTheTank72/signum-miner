@@ -31,7 +31,6 @@ use std::sync::{Arc, Mutex};
 //use std::sync::Arc;
 //use tokio::sync::Mutex;
 use std::thread;
-use std::time::Duration;
 use std::u64;
 use stopwatch::Stopwatch;
 use tokio::runtime::Handle;
@@ -233,7 +232,8 @@ fn scan_plots(
         .drain()
         .map(|(drive_id, mut plots)| {
             plots.sort_by_key(|p| {
-                let m = p.lock().unwrap().fh.metadata().unwrap();
+                let p = p.lock().unwrap();
+                let m = std::fs::metadata(&p.path).unwrap();
                 -FileTime::from_last_modification_time(&m).unix_seconds()
             });
             (drive_id, Arc::new(plots))

@@ -118,7 +118,6 @@ impl RequestHandler {
                             error!("can't send submission params");
                         }
                     }
-                    _ => {}
                 }
             }
         });
