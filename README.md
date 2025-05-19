@@ -108,7 +108,9 @@ cd signum-miner
 # decide on features to run/build:
 simd: support for SSE2, AVX, AVX2 and AVX512F (x86_cpu)
 neon: support for Arm NEON (arm_cpu)
-async_io: enable async disk reads (tokio)
+async_io: enable async disk reads (tokio) and switch internal locks to
+Tokio's asynchronous `Mutex`, so calls to `.lock()` must be awaited
+
 
 # Build with desired features (choose one!)
 cargo build --release --no-default-features --features simd_avx
