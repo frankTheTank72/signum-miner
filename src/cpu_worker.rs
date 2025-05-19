@@ -1,4 +1,14 @@
 use crate::miner::{Buffer, NonceData};
+#[cfg(any(
+    test,
+    not(any(
+        feature = "simd_avx512f",
+        feature = "simd_avx2",
+        feature = "simd_avx",
+        feature = "simd_sse2",
+        feature = "neon",
+    ))
+))]
 use crate::poc_hashing::find_best_deadline_rust;
 use crate::reader::ReadReply;
 use crossbeam_channel::{Receiver, Sender};
@@ -120,6 +130,9 @@ pub fn hash(
         let mut offset: u64 = 0;
 
         let bs = buffer.get_buffer_for_writing();
+#[cfg(feature = "async_io")]
+        let bs = bs.blocking_lock();
+#[cfg(not(feature = "async_io"))]
         let bs = bs.lock().unwrap();
 
         #[cfg(feature = "simd_avx512f")]
