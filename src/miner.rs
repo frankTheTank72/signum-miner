@@ -598,81 +598,85 @@ impl Miner {
         self.executor.clone().spawn(
             ReceiverStream::new(self.rx_nonce_data)
                 .for_each(move |nonce_data| {
-                    #[cfg(feature = "async_io")]
-                    let mut state = state.lock().await;
-                    #[cfg(not(feature = "async_io"))]
-                    let mut state = state.lock().unwrap();
+                    let state = state.clone();
+                    let request_handler = request_handler.clone();
+                    let account_id_to_target_deadline = account_id_to_target_deadline.clone();
+                    async move {
+                        #[cfg(feature = "async_io")]
+                        let mut state = state.lock().await;
+                        #[cfg(not(feature = "async_io"))]
+                        let mut state = state.lock().unwrap();
 
-                    let deadline = nonce_data.deadline / nonce_data.base_target;
-                    if state.height == nonce_data.height {
-                        let best_deadline = *state
-                            .account_id_to_best_deadline
-                            .get(&nonce_data.account_id)
-                            .unwrap_or(&u64::MAX);
-                        if best_deadline > deadline
-                            && deadline
-                                < min(
-                                    state.server_target_deadline,
-                                    *(account_id_to_target_deadline
-                                        .get(&nonce_data.account_id)
-                                        .unwrap_or(&target_deadline)),
-                                )
-                        {
-                            state
+                        let deadline = nonce_data.deadline / nonce_data.base_target;
+                        if state.height == nonce_data.height {
+                            let best_deadline = *state
                                 .account_id_to_best_deadline
-                                .insert(nonce_data.account_id, deadline);
-                            
-                            if inner_submit_only_best {
-                                best_nonce_data = nonce_data.clone();
-                            }
-                            else {
-                                request_handler.submit_nonce(
-                                    nonce_data.account_id,
-                                    nonce_data.nonce,
-                                    nonce_data.height,
-                                    nonce_data.block,
-                                    nonce_data.deadline,
-                                    deadline,
-                                    state.generation_signature_bytes,
-                                );
-                            }
-                        }
-
-                        if nonce_data.reader_task_processed {
-                            state.processed_reader_tasks += 1;
-                            if state.processed_reader_tasks == reader_task_count {
-                                info!(
-                                    "{: <80}",
-                                    format!(
-                                        "round finished: roundtime={}ms, speed={:.2}MiB/s",
-                                        state.sw.elapsed_ms(),
-                                        total_size as f64 * 1000.0
-                                            / 1024.0
-                                            / 1024.0
-                                            / state.sw.elapsed_ms() as f64
+                                .get(&nonce_data.account_id)
+                                .unwrap_or(&u64::MAX);
+                            if best_deadline > deadline
+                                && deadline
+                                    < min(
+                                        state.server_target_deadline,
+                                        *(account_id_to_target_deadline
+                                            .get(&nonce_data.account_id)
+                                            .unwrap_or(&target_deadline)),
                                     )
-                                );
+                            {
+                                state
+                                    .account_id_to_best_deadline
+                                    .insert(nonce_data.account_id, deadline);
 
-                                // Submit now our best one, if configured that way
-                                if best_nonce_data.height == state.height {
-                                    let deadline = best_nonce_data.deadline / best_nonce_data.base_target;
+                                if inner_submit_only_best {
+                                    best_nonce_data = nonce_data.clone();
+                                } else {
                                     request_handler.submit_nonce(
-                                        best_nonce_data.account_id,
-                                        best_nonce_data.nonce,
-                                        best_nonce_data.height,
-                                        best_nonce_data.block,
-                                        best_nonce_data.deadline,
+                                        nonce_data.account_id,
+                                        nonce_data.nonce,
+                                        nonce_data.height,
+                                        nonce_data.block,
+                                        nonce_data.deadline,
                                         deadline,
                                         state.generation_signature_bytes,
                                     );
                                 }
+                            }
 
-                                state.sw.restart();
-                                state.scanning = false;
+                            if nonce_data.reader_task_processed {
+                                state.processed_reader_tasks += 1;
+                                if state.processed_reader_tasks == reader_task_count {
+                                    info!(
+                                        "{: <80}",
+                                        format!(
+                                            "round finished: roundtime={}ms, speed={:.2}MiB/s",
+                                            state.sw.elapsed_ms(),
+                                            total_size as f64 * 1000.0
+                                                / 1024.0
+                                                / 1024.0
+                                                / state.sw.elapsed_ms() as f64
+                                        )
+                                    );
+
+                                    // Submit now our best one, if configured that way
+                                    if best_nonce_data.height == state.height {
+                                        let deadline =
+                                            best_nonce_data.deadline / best_nonce_data.base_target;
+                                        request_handler.submit_nonce(
+                                            best_nonce_data.account_id,
+                                            best_nonce_data.nonce,
+                                            best_nonce_data.height,
+                                            best_nonce_data.block,
+                                            best_nonce_data.deadline,
+                                            deadline,
+                                            state.generation_signature_bytes,
+                                        );
+                                    }
+
+                                    state.sw.restart();
+                                    state.scanning = false;
+                                }
                             }
                         }
                     }
-                    futures_util::future::ready(())
                 }),
         );
         loop {
