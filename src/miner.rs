@@ -341,7 +341,9 @@ impl Miner {
         let buffer_count = cpu_buffer_count;
         #[cfg(feature = "opencl")]
         let buffer_count = cpu_buffer_count + gpu_buffer_count;
-        let buffer_size_cpu = cfg.cpu_nonces_per_cache * SCOOP_SIZE as usize;
+
+        let cpu_nonces_per_cache = cfg.io_buffer_size / SCOOP_SIZE as usize;
+        let buffer_size_cpu = cpu_nonces_per_cache * SCOOP_SIZE as usize;
         let (tx_empty_buffers, rx_empty_buffers) =
             crossbeam_channel::bounded(buffer_count as usize);
         let (tx_read_replies_cpu, rx_read_replies_cpu) =

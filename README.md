@@ -77,6 +77,10 @@ The miner needs a **config.yaml** file.</br>
 Please download from the corresponding release. Direct I/O will be
 automatically disabled for plot directories residing on USB drives.
 
+`io_buffer_size` lets you tune how much data is read from disk per task. The
+default of 4&nbsp;MiB works well for most drives but you may lower it for slow
+USB devices.
+
 ### Running
 Be sure to have the config file on the same folder of your binary.</br>
 
