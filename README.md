@@ -74,7 +74,8 @@ For Windows distributions one of the `.exe` versions:
 ### Config
 
 The miner needs a **config.yaml** file.</br>
-Please download from the corresponding release.
+Please download from the corresponding release. Direct I/O will be
+automatically disabled for plot directories residing on USB drives.
 
 ### Running
 Be sure to have the config file on the same folder of your binary.</br>

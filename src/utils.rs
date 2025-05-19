@@ -101,6 +101,23 @@ cfg_if! {
                 get_sector_size_unix(path)
             }
         }
+
+        pub fn get_bus_type(path: &str) -> String {
+            let source = get_device_id_unix(path);
+            if cfg!(target_os = "linux") {
+                if let Ok(output) = Command::new("lsblk")
+                    .arg(&source)
+                    .arg("-ndo")
+                    .arg("TRAN")
+                    .output()
+                {
+                    if let Ok(bus) = String::from_utf8(output.stdout) {
+                        return bus.lines().next().unwrap_or("").trim().to_lowercase();
+                    }
+                }
+            }
+            String::from("unknown")
+        }
     } else {
         use winapi;
         use crate::utils::winapi::um::processthreadsapi::SetThreadIdealProcessor;
@@ -152,6 +169,26 @@ cfg_if! {
                 panic!("get sector size, filename={}",path);
             };
             u64::from(bytes_per_sector)
+        }
+
+        pub fn get_bus_type(path: &str) -> String {
+            let path_encoded = Path::new(path);
+            let parent_path = if path_encoded.is_dir() {
+                path_encoded
+            } else {
+                path_encoded.parent().unwrap()
+            };
+            let parent_c = CString::new(parent_path.to_str().unwrap()).unwrap();
+            let drive_type = unsafe { winapi::um::fileapi::GetDriveTypeA(parent_c.as_ptr()) };
+            match drive_type {
+                winapi::um::winbase::DRIVE_REMOVABLE => "usb",
+                winapi::um::winbase::DRIVE_FIXED => "fixed",
+                winapi::um::winbase::DRIVE_REMOTE => "remote",
+                winapi::um::winbase::DRIVE_CDROM => "cdrom",
+                winapi::um::winbase::DRIVE_RAMDISK => "ramdisk",
+                _ => "unknown",
+            }
+            .to_string()
         }
 
         pub fn set_thread_ideal_processor(id: usize){
