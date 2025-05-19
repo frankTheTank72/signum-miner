@@ -236,6 +236,9 @@ fn scan_plots(
         .drain()
         .map(|(drive_id, mut plots)| {
             plots.sort_by_key(|p| {
+                #[cfg(feature = "async_io")]
+                let p = p.blocking_lock();
+                #[cfg(not(feature = "async_io"))]
                 let p = p.lock().unwrap();
                 let m = std::fs::metadata(&p.path).unwrap();
                 -FileTime::from_last_modification_time(&m).unix_seconds()
@@ -509,6 +512,9 @@ impl Miner {
                         let mining_info = request_handler.get_mining_info();
                         match mining_info.await {
                             Ok(mining_info) => {
+                                #[cfg(feature = "async_io")]
+                                let mut state = state.lock().await;
+                                #[cfg(not(feature = "async_io"))]
                                 let mut state = state.lock().unwrap();
                                 state.first = false;
                                 if state.outage {
@@ -517,6 +523,15 @@ impl Miner {
                                 }
                                 if mining_info.generation_signature != state.generation_signature {
                                     state.update_mining_info(&mining_info);
+                                    #[cfg(feature = "async_io")]
+                                    reader.lock().await.start_reading(
+                                        mining_info.height,
+                                        state.block,
+                                        mining_info.base_target,
+                                        state.scoop,
+                                        &Arc::new(state.generation_signature_bytes),
+                                    );
+                                    #[cfg(not(feature = "async_io"))]
                                     reader.lock().unwrap().start_reading(
                                         mining_info.height,
                                         state.block,
@@ -530,11 +545,17 @@ impl Miner {
                                     && state.sw.elapsed_ms() > wakeup_after
                                 {
                                     info!("HDD, wakeup!");
+                                    #[cfg(feature = "async_io")]
+                                    reader.lock().await.wakeup();
+                                    #[cfg(not(feature = "async_io"))]
                                     reader.lock().unwrap().wakeup();
                                     state.sw.restart();
                                 }
                             }
                             _ => {
+                                #[cfg(feature = "async_io")]
+                                let mut state = state.lock().await;
+                                #[cfg(not(feature = "async_io"))]
                                 let mut state = state.lock().unwrap();
                                 if state.first {
                                     error!(
@@ -577,6 +598,9 @@ impl Miner {
         self.executor.clone().spawn(
             ReceiverStream::new(self.rx_nonce_data)
                 .for_each(move |nonce_data| {
+                    #[cfg(feature = "async_io")]
+                    let mut state = state.lock().await;
+                    #[cfg(not(feature = "async_io"))]
                     let mut state = state.lock().unwrap();
 
                     let deadline = nonce_data.deadline / nonce_data.base_target;
