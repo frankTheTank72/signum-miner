@@ -168,7 +168,8 @@ impl Plot {
         })
     }
 
-    pub fn prepare(&mut self, scoop: u32) -> io::Result<u64> {
+#[cfg(not(feature = "async_io"))]
+pub fn prepare(&mut self, scoop: u32) -> io::Result<u64> {
         self.read_offset = 0;
         let nonces = self.meta.nonces;
         let mut seek_addr = u64::from(scoop) * nonces as u64 * SCOOP_SIZE;
@@ -208,6 +209,7 @@ impl Plot {
         self.fh.seek(SeekFrom::Start(seek_addr)).await
     }
 
+#[cfg(not(feature = "async_io"))]
     pub fn read(&mut self, bs: &mut Vec<u8>, scoop: u32) -> Result<(usize, u64, bool), io::Error> {
         let read_offset = self.read_offset;
         let buffer_cap = bs.capacity();
@@ -288,6 +290,7 @@ impl Plot {
         Ok((bytes_to_read, start_nonce, finished))
     }
 
+#[cfg(not(feature = "async_io"))]
     pub fn seek_random(&mut self) -> io::Result<u64> {
         let mut rng = thread_rng();
         let rand_scoop = rng.gen_range(0, SCOOPS_IN_NONCE);
