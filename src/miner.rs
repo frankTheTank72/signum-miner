@@ -473,7 +473,7 @@ impl Miner {
                 cfg.show_drive_stats,
                 cfg.cpu_thread_pinning,
                 cfg.benchmark_cpu(),
-            )),
+            ))), // three closing parens
             rx_nonce_data,
             target_deadline: cfg.target_deadline,
             account_id_to_target_deadline: cfg.account_id_to_target_deadline,
@@ -485,7 +485,7 @@ impl Miner {
                 cfg.send_proxy_details,
                 cfg.additional_headers,
                 executor.clone(),
-            )),
+            ))), // three closing parens
             state: Arc::new(Mutex::new(State::new())),
             // floor at 1s to protect servers
             get_mining_info_interval: max(1000, cfg.get_mining_info_interval),
@@ -529,7 +529,15 @@ impl Miner {
 
     pub async fn run(self) {
         use tokio::time::{sleep, Duration};
-        let miner = Arc::new(self);
+        let mut miner = Arc::new(self);
+
+        // Take ownership of the nonce receiver before cloning the miner
+        let rx_nonce_data = {
+            // use a dummy channel to leave a valid receiver inside the miner
+            let (_tx, dummy_rx) = mpsc::channel(1);
+            let inner = Arc::get_mut(&mut miner).expect("unique reference");
+            std::mem::replace(&mut inner.rx_nonce_data, dummy_rx)
+        };
 
         let request_handler = miner.request_handler.clone();
         #[cfg(feature = "async_io")]
@@ -553,10 +561,16 @@ impl Miner {
                     let request_handler = request_handler.clone();
                     async move {
                         #[cfg(feature = "async_io")]
-                        let mining_info = { request_handler.lock().await.get_mining_info() };
+                        let mining_info_fut = {
+                            let rh = request_handler.lock().await.clone();
+                            async move { rh.get_mining_info().await }
+                        };
                         #[cfg(not(feature = "async_io"))]
-                        let mining_info = { request_handler.lock().unwrap().get_mining_info() };
-                        match mining_info.await {
+                        let mining_info_fut = {
+                            let rh = request_handler.lock().unwrap().clone();
+                            async move { rh.get_mining_info().await }
+                        };
+                        match mining_info_fut.await {
                             Ok(mining_info) => {
                                 #[cfg(feature = "async_io")]
                                 let mut state = state.lock().await;
@@ -648,13 +662,13 @@ impl Miner {
         };
 
         let target_deadline = miner.target_deadline;
-        let account_id_to_target_deadline = miner.account_id_to_target_deadline;
+        let account_id_to_target_deadline = miner.account_id_to_target_deadline.clone();
         let request_handler = miner.request_handler.clone();
         let state = miner.state.clone();
         let reader_task_count = miner.reader_task_count;
         let inner_submit_only_best = miner.submit_only_best;
         miner.executor.clone().spawn(
-            ReceiverStream::new(miner.rx_nonce_data)
+            ReceiverStream::new(rx_nonce_data)
                 .for_each(move |nonce_data| {
                     let state = state.clone();
                     let request_handler = request_handler.clone();
