@@ -1,12 +1,12 @@
 use crate::miner::{Buffer, NonceData};
 #[cfg(any(
     test,
+    feature = "neon",
     not(any(
         feature = "simd_avx512f",
         feature = "simd_avx2",
         feature = "simd_avx",
         feature = "simd_sse2",
-        feature = "neon",
     ))
 ))]
 use crate::poc_hashing::find_best_deadline_rust;
