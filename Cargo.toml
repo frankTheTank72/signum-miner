@@ -24,7 +24,7 @@ neon = []
 opencl = ["ocl-core"]
 
 [dependencies]
-embed-resource = "2.4"
+embed-resource = "3.0"
 pin-project = "1"
 cfg-if = "1.0"
 clap = "4.5.37"
