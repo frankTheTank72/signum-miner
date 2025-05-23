@@ -38,8 +38,7 @@ use std::thread;
 use std::u64;
 use stopwatch::Stopwatch;
 use tokio::runtime::Handle;
-use std::alloc::{alloc_zeroed, Layout};
-use page_size;
+
 
 
 pub struct Miner {
@@ -150,23 +149,7 @@ pub struct CpuBuffer {
 
 impl CpuBuffer {
     pub fn new(buffer_size: usize) -> Self {
-        let alignment = page_size::get();
-        let layout = Layout::from_size_align(buffer_size, alignment)
-            .expect("Invalid layout");
-
-        // SAFETY: caller must free this memory, and `Vec::from_raw_parts` must match
-        let raw_ptr = unsafe { alloc_zeroed(layout) };
-
-        if raw_ptr.is_null() {
-            panic!("Aligned allocation failed");
-        }
-
-        // SAFETY:
-        // - raw_ptr must be non-null and valid for `buffer_size` bytes
-        // - memory must be initialized (we used alloc_zeroed)
-        let data = unsafe {
-            Vec::from_raw_parts(raw_ptr, buffer_size, buffer_size)
-        };
+        let data = vec![0u8; buffer_size];
 
         CpuBuffer {
             data: Arc::new(Mutex::new(data)),
