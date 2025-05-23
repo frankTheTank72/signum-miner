@@ -187,26 +187,42 @@ fn scan_plots(
     let mut global_capacity: u64 = 0;
 
     for plot_dir in plot_dirs {
-        let bus_type = get_bus_type(plot_dir.to_str().unwrap());
+        let bus_type = get_bus_type(plot_dir.to_str().unwrap_or_default());
         let is_usb = bus_type.to_lowercase() == "usb" || bus_type.to_lowercase() == "removable";
         let mut num_plots = 0;
         let mut local_capacity: u64 = 0;
-        for file in read_dir(plot_dir).unwrap() {
-            let file = &file.unwrap().path();
+        match read_dir(plot_dir) {
+            Ok(entries) => {
+                for entry in entries {
+                    match entry {
+                        Ok(entry) => {
+                            let file = entry.path();
+                            if let Ok(p) = Plot::new(&file, use_direct_io && !is_usb, dummy) {
+                                let drive_id = get_device_id(&file.to_str().unwrap_or_default().to_string());
+                                let plots = drive_id_to_plots.entry(drive_id).or_insert(Vec::new());
 
-            if let Ok(p) = Plot::new(file, use_direct_io && !is_usb, dummy) {
-                let drive_id = get_device_id(&file.to_str().unwrap().to_string());
-                let plots = drive_id_to_plots.entry(drive_id).or_insert(Vec::new());
-
-                local_capacity += p.meta.nonces as u64;
-                plots.push(Mutex::new(p));
-                num_plots += 1;
+                                local_capacity += p.meta.nonces as u64;
+                                plots.push(Mutex::new(p));
+                                num_plots += 1;
+                            } else {
+                                warn!("failed to load plot {}", file.to_string_lossy());
+                            }
+                        }
+                        Err(e) => {
+                            warn!("failed to read entry in {}: {}", plot_dir.to_string_lossy(), e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("could not read dir {}: {}", plot_dir.to_string_lossy(), e);
+                continue;
             }
         }
 
         info!(
             "path={}, files={}, size={:.4} TiB{}",
-            plot_dir.to_str().unwrap(),
+            plot_dir.to_string_lossy(),
             num_plots,
             local_capacity as f64 / 4.0 / 1024.0 / 1024.0,
             if is_usb { " (USB)" } else { "" }
@@ -214,7 +230,7 @@ fn scan_plots(
 
         global_capacity += local_capacity;
         if num_plots == 0 {
-            warn!("no plots in {}", plot_dir.to_str().unwrap());
+            warn!("no plots in {}", plot_dir.to_string_lossy());
         }
     }
 
@@ -227,8 +243,13 @@ fn scan_plots(
                 let p = p.blocking_lock();
                 #[cfg(not(feature = "async_io"))]
                 let p = p.lock().unwrap();
-                let m = std::fs::metadata(&p.path).unwrap();
-                -FileTime::from_last_modification_time(&m).unix_seconds()
+                match std::fs::metadata(&p.path) {
+                    Ok(m) => -FileTime::from_last_modification_time(&m).unix_seconds(),
+                    Err(e) => {
+                        warn!("failed to get metadata for {}: {}", p.path, e);
+                        0
+                    }
+                }
             });
             (drive_id, Arc::new(plots))
         })
