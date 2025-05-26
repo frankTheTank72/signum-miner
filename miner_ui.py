@@ -112,6 +112,8 @@ class MinerUI:
             messagebox.showerror("Error", f"Failed to save config: {e}")
 
     def start_miner(self):
+        # The UI expects the miner binary to be named "signum-miner". Ensure the
+        # compiled binary uses this exact name or launching will fail.
         cmd = [os.path.join('.', 'signum-miner'), '-c', self.config_path.get()]
         try:
             self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
