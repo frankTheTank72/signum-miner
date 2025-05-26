@@ -97,9 +97,9 @@ For Linux run it with the folliwing command:</br>
 
 ### GUI helper
 
-For an optional graphical interface, run `miner_ui.py` with Python 3. This UI
-lets you edit `config.yaml`, start the miner and monitor its log output in one
-window.
+For an optional graphical interface, run `miner_ui.py` with Python 3. The UI
+lets you edit `config.yaml`, start or stop the miner and monitor its log output
+in a more user friendly window.
 
 ```bash
 python3 miner_ui.py
