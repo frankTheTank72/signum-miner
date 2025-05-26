@@ -97,12 +97,13 @@ For Linux run it with the folliwing command:</br>
 
 ### GUI helper
 
-For an optional graphical interface, run `miner_ui.py` with Python 3. The UI
-now features a dark theme with blue accents and two tabs: a raw YAML editor and
-an **Options** tab that lets you modify configuration values using form fields.
-Install the `pyyaml` package to enable YAML parsing:
+For an optional graphical interface, run `miner_ui.py` with Python 3. The UI now
+uses the [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)
+framework to provide a modern dark theme with blue accents. Two tabs are
+available: a raw YAML editor and an **Options** tab that lets you modify
+configuration values using form fields. Install the required packages first:
 ```bash
-pip install pyyaml
+pip install customtkinter pyyaml
 ```
 You can then edit `config.yaml`, start or stop the miner and monitor its log
 output in a more user friendly window.
@@ -111,8 +112,8 @@ output in a more user friendly window.
 python3 miner_ui.py
 ```
 
-The Tkinter based UI works on Linux, macOS and Windows as long as Python 3 is
-available and the `signum-miner` binary is in the same directory.
+The CustomTkinter based UI works on Linux, macOS and Windows as long as Python 3
+is available and the `signum-miner` binary is in the same directory.
 
 ---
 
