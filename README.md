@@ -115,6 +115,8 @@ python3 miner_ui.py
 
 The CustomTkinter based UI works on Linux, macOS and Windows as long as Python 3
 is available and the `signum-miner` binary is in the same directory.
+Make sure the compiled miner binary is named **exactly** `signum-miner`,
+otherwise the UI will fail to launch it.
 
 ---
 
