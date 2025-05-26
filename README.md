@@ -104,7 +104,7 @@ available: **Home**, a raw YAML editor (**Config**), an **Options** tab for
 editing fields and a **Logs** tab to monitor output. Install the required
 packages first:
 ```bash
-pip install customtkinter pyyaml
+pip install -r requirements.txt
 ```
 You can then edit `config.yaml`, start or stop the miner and monitor its log
 output in a more user friendly window.
@@ -129,6 +129,9 @@ curl https://sh.rustup.rs -sSf | sh
 # Clone the repository
 git clone https://github.com/signum-network/signum-miner
 cd signum-miner
+# Or run the automated setup which installs requirements and builds
+python3 setup.py
+
 
 # decide on features to run/build:
 simd: support for SSE2, AVX, AVX2 and AVX512F (x86_cpu)
