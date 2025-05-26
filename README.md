@@ -98,14 +98,21 @@ For Linux run it with the folliwing command:</br>
 ### GUI helper
 
 For an optional graphical interface, run `miner_ui.py` with Python 3. The UI
-lets you edit `config.yaml`, start or stop the miner and monitor its log output
-in a more user friendly window.
+now features a dark theme with blue accents and two tabs: a raw YAML editor and
+an **Options** tab that lets you modify configuration values using form fields.
+Install the `pyyaml` package to enable YAML parsing:
+```bash
+pip install pyyaml
+```
+You can then edit `config.yaml`, start or stop the miner and monitor its log
+output in a more user friendly window.
 
 ```bash
 python3 miner_ui.py
 ```
 
-Ensure the `signum-miner` binary is available in the same directory.
+The Tkinter based UI works on Linux, macOS and Windows as long as Python 3 is
+available and the `signum-miner` binary is in the same directory.
 
 ---
 
