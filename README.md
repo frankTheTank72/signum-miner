@@ -99,9 +99,10 @@ For Linux run it with the folliwing command:</br>
 
 For an optional graphical interface, run `miner_ui.py` with Python 3. The UI now
 uses the [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)
-framework to provide a modern dark theme with blue accents. Two tabs are
-available: a raw YAML editor and an **Options** tab that lets you modify
-configuration values using form fields. Install the required packages first:
+framework to provide a modern dark theme with blue accents. Four tabs are
+available: **Home**, a raw YAML editor (**Config**), an **Options** tab for
+editing fields and a **Logs** tab to monitor output. Install the required
+packages first:
 ```bash
 pip install customtkinter pyyaml
 ```

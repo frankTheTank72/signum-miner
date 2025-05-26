@@ -23,9 +23,27 @@ class MinerUI:
         self.tabview = ctk.CTkTabview(master)
         self.tabview.pack(fill="both", expand=True)
 
+        self.home_tab = self.tabview.add("Home")
         self.config_tab = self.tabview.add("Config")
         self.options_tab = self.tabview.add("Options")
         self.logs_tab = self.tabview.add("Logs")
+
+        # Home tab content
+        logo_path = os.path.join(os.path.dirname(__file__), "signum_logo.png")
+        if os.path.exists(logo_path):
+            self.logo_image = tk.PhotoImage(file=logo_path)
+            ctk.CTkLabel(self.home_tab, image=self.logo_image, text="").pack(pady=10)
+        ctk.CTkLabel(
+            self.home_tab,
+            text="Signum — The sustainable blockchain",
+            font=("Arial", 20),
+        ).pack(pady=(0, 10))
+        ctk.CTkLabel(
+            self.home_tab,
+            text="Join the green revolution of decentralized computing — mine with purpose. Mine with Signum.",
+            wraplength=600,
+            justify="center",
+        ).pack(pady=10)
 
         path_frame = ctk.CTkFrame(self.config_tab, fg_color="transparent")
         path_frame.pack(fill="x", padx=5, pady=5)
