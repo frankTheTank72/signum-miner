@@ -3,35 +3,49 @@ import subprocess
 import threading
 import queue
 import tkinter as tk
-from tkinter import filedialog, scrolledtext, messagebox
+from tkinter import filedialog, scrolledtext, messagebox, ttk
 
 class MinerUI:
     def __init__(self, master):
         self.master = master
         self.master.title("Signum Miner UI")
+        self.master.geometry("800x600")
 
         self.config_path = tk.StringVar(value="config.yaml")
-        path_frame = tk.Frame(master)
-        path_frame.pack(fill=tk.X, padx=5, pady=5)
-        tk.Label(path_frame, text="Config Path:").pack(side=tk.LEFT)
-        tk.Entry(path_frame, textvariable=self.config_path, width=50).pack(side=tk.LEFT, expand=True, fill=tk.X)
-        tk.Button(path_frame, text="Browse", command=self.browse_config).pack(side=tk.LEFT, padx=5)
-        tk.Button(path_frame, text="Load", command=self.load_config).pack(side=tk.LEFT)
-        tk.Button(path_frame, text="Save", command=self.save_config).pack(side=tk.LEFT)
 
-        self.text = scrolledtext.ScrolledText(master, width=80, height=20)
+        self.notebook = ttk.Notebook(master)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        self.config_tab = ttk.Frame(self.notebook)
+        self.logs_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.config_tab, text="Config")
+        self.notebook.add(self.logs_tab, text="Logs")
+
+        path_frame = ttk.Frame(self.config_tab)
+        path_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Label(path_frame, text="Config Path:").pack(side=tk.LEFT)
+        ttk.Entry(path_frame, textvariable=self.config_path, width=50).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        ttk.Button(path_frame, text="Browse", command=self.browse_config).pack(side=tk.LEFT, padx=5)
+        ttk.Button(path_frame, text="Load", command=self.load_config).pack(side=tk.LEFT)
+        ttk.Button(path_frame, text="Save", command=self.save_config).pack(side=tk.LEFT)
+
+        self.text = scrolledtext.ScrolledText(self.config_tab, width=80, height=20)
         self.text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        log_label = tk.Label(master, text="Logs:")
-        log_label.pack(anchor=tk.W, padx=5)
-        self.log_text = scrolledtext.ScrolledText(master, width=80, height=15, state=tk.DISABLED)
+        self.log_text = scrolledtext.ScrolledText(self.logs_tab, width=80, height=20, state=tk.DISABLED)
         self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        btn_frame = tk.Frame(master)
+        btn_frame = ttk.Frame(master)
         btn_frame.pack(fill=tk.X, padx=5, pady=5)
-        self.run_btn = tk.Button(btn_frame, text="Run Miner", command=self.toggle_miner)
-        self.run_btn.pack(side=tk.LEFT)
-        tk.Button(btn_frame, text="Quit", command=master.quit).pack(side=tk.RIGHT)
+        self.start_btn = ttk.Button(btn_frame, text="Start Miner", command=self.start_miner)
+        self.start_btn.pack(side=tk.LEFT)
+        self.stop_btn = ttk.Button(btn_frame, text="Stop Miner", command=self.stop_miner, state=tk.DISABLED)
+        self.stop_btn.pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Quit", command=master.quit).pack(side=tk.RIGHT)
+
+        self.status_var = tk.StringVar(value="Idle")
+        status_bar = ttk.Label(master, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
+        status_bar.pack(fill=tk.X, side=tk.BOTTOM)
 
         self.process = None
         self.log_queue = queue.Queue()
@@ -60,17 +74,13 @@ class MinerUI:
         except OSError as e:
             messagebox.showerror("Error", f"Failed to save config: {e}")
 
-    def toggle_miner(self):
-        if self.process:
-            self.stop_miner()
-        else:
-            self.start_miner()
-
     def start_miner(self):
         cmd = [os.path.join('.', 'signum-miner'), '-c', self.config_path.get()]
         try:
             self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            self.run_btn.config(text="Stop Miner")
+            self.start_btn.config(state=tk.DISABLED)
+            self.stop_btn.config(state=tk.NORMAL)
+            self.status_var.set("Mining...")
             threading.Thread(target=self.enqueue_output, daemon=True).start()
         except OSError as e:
             messagebox.showerror("Error", f"Failed to start miner: {e}")
@@ -81,14 +91,18 @@ class MinerUI:
             self.process.terminate()
             self.process.wait()
             self.process = None
-            self.run_btn.config(text="Run Miner")
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        self.status_var.set("Stopped")
 
     def enqueue_output(self):
         assert self.process and self.process.stdout
         for line in self.process.stdout:
             self.log_queue.put(line)
         self.process = None
-        self.run_btn.config(text="Run Miner")
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        self.status_var.set("Stopped")
 
     def update_logs(self):
         while not self.log_queue.empty():
