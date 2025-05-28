@@ -1,6 +1,5 @@
 use crate::utils::get_sector_size;
 use rand::prelude::*;
-use rand::{thread_rng, Rng};
 use std::cmp::{max, min};
 use std::error::Error;
 use std::fs;
@@ -216,7 +215,7 @@ impl Plot {
     }
 
     pub fn seek_random(&mut self) -> io::Result<u64> {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let rand_scoop = rng.gen_range(0..SCOOPS_IN_NONCE);
 
         let mut seek_addr = rand_scoop as u64 * self.meta.nonces as u64 * SCOOP_SIZE;
